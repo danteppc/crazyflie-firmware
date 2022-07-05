@@ -1,0 +1,7 @@
+bin/*
+cf2.*
+/build
+built-in.o
+push.o
+.push.o.cmd
+.built-in.o.cmd
