@@ -1,8 +1,8 @@
 
 OPENOCD           ?= openocd
-OPENOCD_INTERFACE ?= interface/stlink-v2.cfg
+OPENOCD_INTERFACE ?= interface/jlink.cfg
 OPENOCD_TARGET    ?= target/stm32f4x.cfg
-OPENOCD_CMDS      ?=
+OPENOCD_CMDS      ?= -c "transport select swd"
 
 CPU                        = stm32f4
 LOAD_ADDRESS_stm32f4       = 0x8000000
