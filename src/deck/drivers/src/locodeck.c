@@ -93,6 +93,8 @@ static lpsAlgoOptions_t algoOptions = {
   // .userRequestedMode is the wanted algorithm, available as a parameter
 #if defined(CONFIG_DECK_LOCO_ALGORITHM_TDOA2)
   .userRequestedMode = lpsMode_TDoA2,
+    .userRequestedMode = lpsMode_TDoA2,
+
 #elif defined(CONFIG_DECK_LOCO_ALGORITHM_TDOA3)
   .userRequestedMode = lpsMode_TDoA3,
 #elif defined(CONFIG_DECK_LOCO_ALGORITHM_TWR)

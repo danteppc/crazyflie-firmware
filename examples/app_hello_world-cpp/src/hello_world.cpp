@@ -51,6 +51,7 @@ class MyClass {
     int myNum;
     std::string myString;
 };
+static uint32_t tick;
 
 void appMain()
 {
@@ -64,7 +65,8 @@ void appMain()
   assert(cl->myNum + cl->myString.size() == 0);
 
   while(1) {
+    tick = xTaskGetTickCount();
     vTaskDelay(M2T(2000));
-    DEBUG_PRINT("Hello World!\n");
+    DEBUG_PRINT("Hello World! Timestamp = %ld \n", tick);
   }
 }

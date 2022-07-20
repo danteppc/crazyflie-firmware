@@ -44,26 +44,21 @@ static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, 
 
 void appMain()
 {
-  static setpoint_t setpoint ;
+  static setpoint_t setpoint;
   //systemWaitStart();
   bool takeoff = true;
   DEBUG_PRINT("Waiting for activation ...\n");
   vTaskDelay(M2T(5000));
   float height = 0.5f;
-int counter = 0;
+  int counter = 0
   while(takeoff) {
-    //DEBUG_PRINT(".");
     counter++;
     vTaskDelay(M2T(10));
-
     setHoverSetpoint(&setpoint, 0, 0, height, 0);
     commanderSetSetpoint(&setpoint, 3);
-  if (counter > 500)
-    takeoff = false ;
-
+    if (counter > 500)
+    	takeoff = false ;
     }
     setHoverSetpoint(&setpoint, 0,0,0,0);
     commanderSetSetpoint(&setpoint, 3);
-
   }
-

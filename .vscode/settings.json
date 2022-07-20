@@ -8,5 +8,6 @@
         "bootloader.h": "c",
         "app.h": "c",
         "locodeck.h": "c"
-    }
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools"
 }
