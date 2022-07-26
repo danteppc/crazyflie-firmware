@@ -45,7 +45,7 @@ void appMain() {
     point_t position;
     uint8_t unorderedAnchorList[7];
 
-    locoDeckGetAnchorPosition(0, &position);
+    
     locoDeckGetAnchorIdList(unorderedAnchorList, 7);
     locoDeckGetActiveAnchorIdList(unorderedAnchorList, 7);
     
@@ -59,7 +59,12 @@ void appMain() {
     //mac1=&anchor_list;
    // print_hash(resultpow);
    for(unsigned int i = 0; i < 7; ++i){
-		DEBUG_PRINT("%02x", unorderedAnchorList[i]);
+    locoDeckGetAnchorPosition(i, &position);
+    double x =position.x ;
+    double y =position.y;
+    double z =position.z;
+		//DEBUG_PRINT("%02x", unorderedAnchorList[i]);
+    DEBUG_PRINT("pos %d : (%f/%f/%f) x,y,z  ", i ,x ,y,z );
     
 	  }
    /*for(unsigned int i = 0; i < 16; ++i){
