@@ -1,0 +1,7 @@
+obj-y += tesla.o
+obj-y += md5/
+obj-y += receiver/
+obj-y += sender/
+obj-y += functions/
+
+
