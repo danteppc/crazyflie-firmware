@@ -47,18 +47,31 @@ void appMain()
   static setpoint_t setpoint;
   //systemWaitStart();
   bool takeoff = true;
+  bool gotopos1 = false;
+
   DEBUG_PRINT("Waiting for activation ...\n");
   vTaskDelay(M2T(5000));
   float height = 0.5f;
-  int counter = 0
+  int counter = 0;
   while(takeoff) {
     counter++;
     vTaskDelay(M2T(10));
-    setHoverSetpoint(&setpoint, 0, 0, height, 0);
-    commanderSetSetpoint(&setpoint, 3);
-    if (counter > 500)
-    	takeoff = false ;
+    if (gotopos1) {
+      setHoverSetpoint(&setpoint, 0.5f, 0, height, 0);
+      commanderSetSetpoint(&setpoint, 3);
+    } else {
+      setHoverSetpoint(&setpoint, 0, 0, height, 0);
+      commanderSetSetpoint(&setpoint, 3);
     }
+    if (counter > 500)
+    	gotopos1 = true;
+
+    if (counter > 1000)
+    	takeoff = false ;
+
+    }
+
+
     setHoverSetpoint(&setpoint, 0,0,0,0);
     commanderSetSetpoint(&setpoint, 3);
   }

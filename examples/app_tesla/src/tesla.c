@@ -1,5 +1,5 @@
 /**
-Demo FloyDeck for TUWIEN
+Demo FlowDeck for TUWIEN
  */
 
 
@@ -68,9 +68,6 @@ void appMain() {
     double z =position.z;
 		//DEBUG_PRINT("%02x", unorderedAnchorList[i]);
     DEBUG_PRINT("pos %d : (%f/%f/%f) x,y,z  ", i ,x ,y,z );
-    x =0 ;
-    y =0;
-    z =0;
     
 	  }
    /*for(unsigned int i = 0; i < 16; ++i){
