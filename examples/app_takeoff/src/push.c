@@ -38,10 +38,6 @@ static void setHoverSetpoint(setpoint_t *setpoint, float vx, float vy, float z, 
   setpoint->velocity_body = true;
 }
 
-
-
-
-
 void appMain()
 {
   static setpoint_t setpoint;
@@ -51,13 +47,13 @@ void appMain()
 
   DEBUG_PRINT("Waiting for activation ...\n");
   vTaskDelay(M2T(5000));
-  float height = 0.5f;
+  float height = 0.4f;
   int counter = 0;
   while(takeoff) {
     counter++;
     vTaskDelay(M2T(10));
     if (gotopos1) {
-      setHoverSetpoint(&setpoint, 0.5f, 0, height, 0);
+      setHoverSetpoint(&setpoint, 0.25f, 0, height, 0);
       commanderSetSetpoint(&setpoint, 3);
     } else {
       setHoverSetpoint(&setpoint, 0, 0, height, 0);
@@ -68,10 +64,7 @@ void appMain()
 
     if (counter > 1000)
     	takeoff = false ;
-
     }
-
-
     setHoverSetpoint(&setpoint, 0,0,0,0);
     commanderSetSetpoint(&setpoint, 3);
   }

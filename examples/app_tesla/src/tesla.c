@@ -11,21 +11,40 @@ Demo FlowDeck for TUWIEN
 #include "app.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "stm32f4xx_conf.h"
+#include "log.h"
+#include "param.h"
+#include "debug.h"
+
 #include "md5.h"
 #include "functions.h"
 #include "sender.h"
 #include "receiver.h"
 
-#define DEBUG_MODULE ""
-#include "debug.h"
+
+
+#define DEBUG_MODULE " "
+
 #include "locodeck.h"
 #include "lpsTdoa2Tag.h"
+
+
+TaskHandle_t teslaTaskHandle = NULL;
 
 char data_raw[12]= "Hello World";
 char msg1[12]= "TU WIEN";
 
+uint8_t tesla_counter = 0;
+
+void teslaTask (void *p) {
+    while (1) {
+        vTaskDelay(100);
+        DEBUG_PRINT("tesla time = %d",tesla_counter++);
+    }
+    vTaskDelete(teslaTaskHandle);
+}
+
 void appMain() {
+  xTaskCreate(teslaTask, "teslaTask", 200, (void*) 0, tskIDLE_PRIORITY, &teslaTaskHandle);
   DEBUG_PRINT("Waiting for activation ...\n");
   uint8_t *keyObject= malloc(16);
   keyObject = md5String(data_raw);
@@ -81,3 +100,20 @@ void appMain() {
     //DEBUG_PRINT("%d \n", *resultpow);
   }
 }
+
+
+/**
+ * [Documentation for the ring group ...]
+ */
+PARAM_GROUP_START(tesla)
+PARAM_ADD(PARAM_UINT8, teslacnt, &tesla_counter)
+
+PARAM_GROUP_STOP(tesla)
+
+
+
+// LOG_GROUP_START(tesla)
+// LOG_ADD(LOG_FLOAT, cmdVelX, &cmdVelX) 
+
+// LOG_GROUP_STOP(tesla)
+

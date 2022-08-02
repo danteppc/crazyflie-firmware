@@ -35,10 +35,28 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "log.h"
+#include "param.h"
 
 #define DEBUG_MODULE "HELLOWORLD"
 #include "debug.h"
+static const uint16_t unlockThLow = 100;
+static const uint16_t unlockThHigh = 300;
+static const uint16_t stoppedTh = 500;
 
+// Handling the height setpoint
+static const float spHeight = 0.5f;
+static const uint16_t radius = 300;
+
+// Some wallfollowing parameters and logging
+bool goLeft = false;
+float distanceToWall = 0.5f;
+float maxForwardSpeed = 0.5f;
+
+float cmdVelX = 0.0f;
+float cmdVelY = 0.0f;
+float cmdAngWRad = 0.0f;
+float cmdAngWDeg = 0.0f;
 
 void appMain() {
   DEBUG_PRINT("Waiting for activation ...\n");
@@ -48,3 +66,13 @@ void appMain() {
     DEBUG_PRINT("Hello World!\n");
   }
 }
+
+PARAM_GROUP_START(app)
+PARAM_ADD(PARAM_UINT8, goLeft, &goLeft)
+PARAM_ADD(PARAM_FLOAT, distanceWall, &distanceToWall)
+PARAM_GROUP_STOP(app)
+
+LOG_GROUP_START(app)
+LOG_ADD(LOG_FLOAT, cmdVelX, &cmdVelX)
+LOG_ADD(LOG_FLOAT, cmdVelY, &cmdVelY)
+LOG_GROUP_STOP(app)
