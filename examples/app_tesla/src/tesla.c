@@ -37,7 +37,7 @@ uint8_t tesla_counter = 0;
 
 void teslaTask (void *p) {
     while (1) {
-        vTaskDelay(100);
+        vTaskDelay(1);
         DEBUG_PRINT("tesla time = %d",tesla_counter++);
     }
     vTaskDelete(teslaTaskHandle);

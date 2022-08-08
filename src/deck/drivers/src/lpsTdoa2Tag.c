@@ -43,6 +43,8 @@
 #include "physicalConstants.h"
 #include "tdoaEngineInstance.h"
 
+#include "debug.h"
+
 #if ANCHOR_STORAGE_COUNT < LOCODECK_NR_OF_TDOA2_ANCHORS
   #error "Tdoa engine storage is too small"
 #endif
@@ -346,7 +348,9 @@ static uint8_t getActiveAnchorIdList(uint8_t unorderedAnchorList[], const int ma
 static void lpsHandleLppShortPacket(const uint8_t srcId, const uint8_t *data, tdoaAnchorContext_t* anchorCtx)
 {
   uint8_t type = data[0];
-
+  //if (type == LPP_SHORT_INIT_TESLA) {
+    //DEBUG_PRINT("DATA LPS : %d d[1]=%d, d[2]=%d \n", type,data[1], data[2] );
+  //}
   if (type == LPP_SHORT_ANCHORPOS) {
     if (srcId < LOCODECK_NR_OF_TDOA2_ANCHORS) {
       struct lppShortAnchorPos_s *newpos = (struct lppShortAnchorPos_s*)&data[1];
