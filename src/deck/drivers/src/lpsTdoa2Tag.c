@@ -93,6 +93,7 @@ static uint16_t logAnchorDistance[LOCODECK_NR_OF_TDOA2_ANCHORS];
 static bool rangingOk;
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
 
+
 // The default receive time in the anchors for messages from other anchors is 0
 // and is overwritten with the actual receive time when a packet arrives.
 // That is, if no message was received the rx time will be 0.
@@ -302,6 +303,9 @@ static void sendTdoaToEstimatorCallback(tdoaMeasurement_t* tdoaMeasurement) {
 
 
 static void Initialize(dwDevice_t *dev) {
+
+
+
   uint32_t now_ms = T2M(xTaskGetTickCount());
   tdoaEngineInit(&tdoaEngineState, now_ms, sendTdoaToEstimatorCallback, LOCODECK_TS_FREQ, TdoaEngineMatchingAlgorithmYoungest);
 
@@ -348,13 +352,15 @@ static uint8_t getActiveAnchorIdList(uint8_t unorderedAnchorList[], const int ma
 static void lpsHandleLppShortPacket(const uint8_t srcId, const uint8_t *data, tdoaAnchorContext_t* anchorCtx)
 {
   uint8_t type = data[0];
-  //if (type == LPP_SHORT_INIT_TESLA) {
-    //DEBUG_PRINT("DATA LPS : %d d[1]=%d, d[2]=%d \n", type,data[1], data[2] );
-  //}
   if (type == LPP_SHORT_ANCHORPOS) {
     if (srcId < LOCODECK_NR_OF_TDOA2_ANCHORS) {
       struct lppShortAnchorPos_s *newpos = (struct lppShortAnchorPos_s*)&data[1];
       tdoaStorageSetAnchorPosition(anchorCtx, newpos->x, newpos->y, newpos->z);
+      if (srcId == 3) {
+        if (newpos->hash) {
+            // got it
+        }
+      }
     }
   }
 }

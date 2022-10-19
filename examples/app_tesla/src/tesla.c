@@ -20,31 +20,32 @@ Demo FlowDeck for TUWIEN
 #include "sender.h"
 #include "receiver.h"
 
-
-
 #define DEBUG_MODULE " "
 
 #include "locodeck.h"
 #include "lpsTdoa2Tag.h"
 
 
-TaskHandle_t teslaTaskHandle = NULL;
+//TaskHandle_t teslaTaskHandle = NULL;
 
 char data_raw[12]= "Hello World";
 char msg1[12]= "TU WIEN";
 
-uint8_t tesla_counter = 0;
 
-void teslaTask (void *p) {
-    while (1) {
-        vTaskDelay(1);
-        DEBUG_PRINT("tesla time = %d",tesla_counter++);
-    }
-    vTaskDelete(teslaTaskHandle);
-}
+// uint32_t tesla_counter;
+
+// void teslaTask (void *p) {
+//     while (1) {
+//         vTaskDelay(1);
+// 	      tesla_counter++;
+//         if (tesla_counter%1000 == 0)
+//           DEBUG_PRINT(">fw tesla time = %lu \r\n",tesla_counter/1000);
+//     }
+//     vTaskDelete(teslaTaskHandle);
+// }
 
 void appMain() {
-  xTaskCreate(teslaTask, "teslaTask", 200, (void*) 0, tskIDLE_PRIORITY, &teslaTaskHandle);
+  //xTaskCreate(teslaTask, "teslaTask", configMINIMAL_STACK_SIZE, (void*) 0, tskIDLE_PRIORITY, &teslaTaskHandle);
   DEBUG_PRINT("Waiting for activation ...\n");
   uint8_t *keyObject= malloc(16);
   keyObject = md5String(data_raw);
@@ -82,12 +83,14 @@ void appMain() {
 
 
     //The VALUES ARE IN FLOAT THEY ARE ONLY CONVERT TO DOUBLE FOR THE PRINT 
+    /*
     double x =position.x ;
     double y =position.y;
     double z =position.z;
 		//DEBUG_PRINT("%02x", unorderedAnchorList[i]);
-    DEBUG_PRINT("pos %d : (%f/%f/%f) x,y,z  ", i ,x ,y,z );
-    
+    DEBUG_PRINT("pos %d : (%f/%f/%f) x,y,z  \r\n", i ,x ,y,z );
+    */
+   
 	  }
    /*for(unsigned int i = 0; i < 16; ++i){
 		DEBUG_PRINT("%02x", mac1[i]);
@@ -105,10 +108,9 @@ void appMain() {
 /**
  * [Documentation for the ring group ...]
  */
-PARAM_GROUP_START(tesla)
-PARAM_ADD(PARAM_UINT8, teslacnt, &tesla_counter)
-
-PARAM_GROUP_STOP(tesla)
+// PARAM_GROUP_START(tesla)
+// PARAM_ADD(PARAM_UINT32, teslacnt, &tesla_counter)
+// PARAM_GROUP_STOP(tesla)
 
 
 

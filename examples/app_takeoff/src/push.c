@@ -46,14 +46,14 @@ void appMain()
   bool gotopos1 = false;
 
   DEBUG_PRINT("Waiting for activation ...\n");
-  vTaskDelay(M2T(5000));
+  vTaskDelay(M2T(30000));
   float height = 0.4f;
   int counter = 0;
   while(takeoff) {
     counter++;
     vTaskDelay(M2T(10));
     if (gotopos1) {
-      setHoverSetpoint(&setpoint, 0.25f, 0, height, 0);
+      setHoverSetpoint(&setpoint, 0.3f, 0, height, 0);
       commanderSetSetpoint(&setpoint, 3);
     } else {
       setHoverSetpoint(&setpoint, 0, 0, height, 0);
