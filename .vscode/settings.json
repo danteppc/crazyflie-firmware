@@ -9,7 +9,12 @@
         "app.h": "c",
         "locodeck.h": "c",
         "receiver.h": "c",
-        "wallfollowing_multiranger_onboard.h": "c"
+        "wallfollowing_multiranger_onboard.h": "c",
+        "debug.h": "c",
+        "__locale": "c",
+        "__threading_support": "c",
+        "vector": "c"
     },
-    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools"
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools",
+    "cortex-debug.variableUseNaturalFormat": true
 }

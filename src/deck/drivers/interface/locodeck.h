@@ -133,7 +133,9 @@ struct lppShortAnchorPos_s {
   float x;
   float y;
   float z;
+  uint8_t phash[8];
   uint8_t hash[8];
+  uint8_t key[8];
 } __attribute__((packed));
 
 struct lppShortInitTESLA_s {

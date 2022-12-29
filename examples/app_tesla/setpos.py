@@ -92,15 +92,27 @@ class LpsRebootToBootloader:
     def _sync_thread(self):
         
         anchors = LoPoAnchor(self._cf)
-        anchors.set_position(0, (-1.0, -1.0, 0.0))
-        anchors.set_position(1, (-1.0, 1.0, 1.0))
-        anchors.set_position(2, (1.0, 1.0, 0.0))
-        anchors.set_position(3, (1.0, -1.0, 1.0))
-        anchors.set_position(4, (-1.0, -1.0, 1.0))
-        anchors.set_position(5, (-1.0, 1.0, 0.0))
-        anchors.set_position(6, (1.0, 1.0, 1.0))
-        anchors.set_position(7, (1.0, -1.0, 0.0))
-            
+        
+        #anchors.set_position(0, (-1.0, -1.0, 0.0))
+        #anchors.set_position(1, (-1.0, 1.0, 1.0))
+        #anchors.set_position(2, (1.0, 1.0, 0.0))
+        #anchors.set_position(3, (1.0, -1.0, 1.0))
+        #anchors.set_position(4, (-1.0, -1.0, 1.0))
+        #anchors.set_position(5, (-1.0, 1.0, 0.0))
+        #anchors.set_position(6, (1.0, 1.0, 1.0))
+        #anchors.set_position(7, (1.0, -1.0, 0.0))
+        anchors.set_position(0, (10,10,0))
+        anchors.set_position(1, (10,10,0))
+        anchors.set_position(2, (10,10,0))
+        anchors.set_position(3, (10,10,0))
+        anchors.set_position(4, (10,10,0))
+        anchors.set_position(5, (10,10,0))
+        anchors.set_position(6, (10,10,0))
+        anchors.set_position(7, (10,10,0))
+        #anchors.set_position(1, (10,10,10))
+        #anchors.set_position(2, (10,10,10))
+        #anchors.set_position(3, (10,10,10))
+        
         self._cf.close_link()
 
 

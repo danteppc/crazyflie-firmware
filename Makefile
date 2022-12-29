@@ -1,6 +1,6 @@
 
 OPENOCD           ?= openocd
-OPENOCD_INTERFACE ?= interface/jlink.cfg
+OPENOCD_INTERFACE ?= $(srctree)/jlink_building.cfg
 OPENOCD_TARGET    ?= target/stm32f4x.cfg
 OPENOCD_CMDS      ?= -c "transport select swd"
 

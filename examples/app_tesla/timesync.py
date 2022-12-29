@@ -33,9 +33,26 @@ from threading import Thread
 import cflib
 from cflib.crazyflie import Crazyflie
 from cflib.utils import uri_helper
-from lpslib.lopoanchor import LoPoAnchor
+#from lpslib.lopoanchor import LoPoAnchor
 import time
+import struct
 
+class LoPoAnchor():
+    LPP_TYPE_INIT_TESLA = 6 # lpp.h
+    
+    def __init__(self, crazyflie):
+        """
+        :param crazyflie: A crazyflie object to be used as a bridge to the LoPo
+         system."""
+        self.crazyflie = crazyflie
+        
+    def init_tesla(self, time):
+        for i in range(8):
+            data = struct.pack('<BL', LoPoAnchor.LPP_TYPE_INIT_TESLA, time) 
+            self.crazyflie.loc.send_short_lpp_packet(i, data)
+            print(f"sent 'reset tesla_counter' to anchor '{i}'")
+            
+            
 uri = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
 
 logging.basicConfig(level=logging.ERROR)
