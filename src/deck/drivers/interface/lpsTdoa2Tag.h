@@ -8,6 +8,8 @@
 
 #include "autoconf.h"
 
+extern uint32_t tesla_counter;
+extern bool tesla_init;
 extern uwbAlgorithm_t uwbTdoa2TagAlgorithm;
 
 #define LOCODECK_NR_OF_TDOA2_ANCHORS CONFIG_DECK_LOCO_NR_OF_ANCHORS

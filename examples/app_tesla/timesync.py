@@ -50,10 +50,10 @@ class LoPoAnchor():
         for i in range(8):
             data = struct.pack('<BL', LoPoAnchor.LPP_TYPE_INIT_TESLA, time) 
             self.crazyflie.loc.send_short_lpp_packet(i, data)
-            print(f"sent 'reset tesla_counter' to anchor '{i}'")
+            print(f"sent 'resync tesla_counter' to anchor '{i}'")
             
             
-uri = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
+uri = uri_helper.uri_from_env(default='usb://0')
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -108,12 +108,14 @@ class LpsRebootToBootloader:
         print('Disconnected from %s' % link_uri)
 
     def _sync_thread(self):
-        resync_period = 10 * 1000 # 10sec
+        resync_period = 1000 # 1 sec
+        #resync_period = 10 * 1000 # 10sec
+        
         global counter
         #self._cf.console.receivedChar.add_callback(console_callback)
         
-        anchors = LoPoAnchor(self._cf)
-        anchors.init_tesla(0)
+#        anchors = LoPoAnchor(self._cf)
+#        anchors.init_tesla(1)
     
         while True:
             counter += 1
@@ -124,7 +126,7 @@ class LpsRebootToBootloader:
                 
             if (counter%resync_period==0):
                 anchors = LoPoAnchor(self._cf)
-                anchors.init_tesla(1)
+                anchors.init_tesla(counter)
                 
         #self._cf.close_link()
 

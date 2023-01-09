@@ -495,7 +495,7 @@ void populateKeys(char keys[100][16], int count) {
 	
 int main(int argc, char *argv[]) {
 	const char ids[8] = {'0','1','2','3','4','5','6','7'};
-	const int len = 10;
+	const int len = 16;
 	md5_byte_t keychain[len] = {'\0'}; // 50 lpp/s over 10 minutes of keysize 8
 	for (int index = 0; index < 8;index++) {
 		keychain[0]=ids[index];

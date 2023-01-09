@@ -375,15 +375,15 @@ static void uwbTask(void* parameters) {
 }
 
 static lpsLppShortPacket_t lppShortPacket;
-static uint32_t tesla_counter = 0;
+
 TaskHandle_t teslaTaskHandle = NULL;
 
 static void teslaTask (void *p) {
     while (1) {
-        vTaskDelay(1);
-	      tesla_counter++;
-        if (tesla_counter%1000 == 0)
-          DEBUG_PRINT("tesla time = %lu \r\n",tesla_counter);
+        vTaskDelay(100);
+	      tesla_counter+=100;
+        //if (tesla_counter%1000 == 0)
+          //DEBUG_PRINT("tesla time = %lu \r\n",tesla_counter);
     }
     vTaskDelete(teslaTaskHandle);
 }
@@ -407,8 +407,14 @@ bool lpsSendLppShort(uint8_t destId, void* data, size_t length)
 
   uint8_t type = _data[0];
   if (type == LPP_SHORT_INIT_TESLA) {
-    uint32_t val = _data[1];
-    tesla_counter = val ? roundToNearestMultiple(tesla_counter) : 0; 
+    uint32_t val;
+    memcpy(&val,&_data[1],sizeof(uint32_t));
+    tesla_counter = val;
+    if (tesla_init == false) {
+      tesla_init = true;
+    } else {
+      // val ? roundToNearestMultiple(tesla_counter) : 0;  
+    }
   }
 
   if (isInit)
@@ -578,7 +584,7 @@ static void dwm1000Init(DeckInfo *info)
                     LPS_DECK_TASK_PRI, &uwbTaskHandle);
 
   xTaskCreate(teslaTask, "teslaTask", configMINIMAL_STACK_SIZE, NULL,
-                    tskIDLE_PRIORITY, &teslaTaskHandle);
+                    configMAX_PRIORITIES - 1, &teslaTaskHandle);
   
   isInit = true;
 }

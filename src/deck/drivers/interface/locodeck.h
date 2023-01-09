@@ -129,6 +129,7 @@ void locoDeckSetRangingState(const uint16_t newState);
 
 //extern bool tesla_activated;
 
+
 struct lppShortAnchorPos_s {
   float x;
   float y;
@@ -136,6 +137,10 @@ struct lppShortAnchorPos_s {
   uint8_t phash[8];
   uint8_t hash[8];
   uint8_t key[8];
+  uint32_t tesla_counter;
+    uint32_t currentInterval;
+    uint8_t currentKeyByte;
+
 } __attribute__((packed));
 
 struct lppShortInitTESLA_s {
