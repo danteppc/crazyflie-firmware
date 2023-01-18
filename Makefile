@@ -146,6 +146,23 @@ else
   LOAD_ADDRESS = $(LOAD_ADDRESS_$(CPU))
 endif
 
+
+# Radio bootloader
+CLOAD ?= 1
+cload_factory:
+ifeq ($(CLOAD), 1)
+	$(CLOAD_SCRIPT) $(CLOAD_CMDS) flash $(CLOAD_ARGS) /Users/mahyar/Developer/crazyflie/cf2-2022.12.bin stm32-fw
+else
+	@echo "Only cload build can be bootloaded. Launch build and cload with CLOAD=1"
+endif
+
+# Flags required by the ST library
+ifeq ($(CLOAD), 1)
+  LOAD_ADDRESS = $(LOAD_ADDRESS_CLOAD_$(CPU))
+else
+  LOAD_ADDRESS = $(LOAD_ADDRESS_$(CPU))
+endif
+
 unit:
 # The flag "-DUNITY_INCLUDE_DOUBLE" allows comparison of double values in Unity. See: https://stackoverflow.com/a/37790196
 	rake unit "DEFINES=$(ARCH_CFLAGS) -DUNITY_INCLUDE_DOUBLE" "FILES=$(FILES)" "UNIT_TEST_STYLE=$(UNIT_TEST_STYLE)"
@@ -165,6 +182,10 @@ flash_verify:
 flash_dfu:
 	$(PYTHON) $(srctree)/tools/make/usb-bootloader.py
 	$(DFU_UTIL) -d 0483:df11 -a 0 -s 0x08004000:leave -D $(PROG).bin 
+
+flash_dfu_factory:
+	$(PYTHON) $(srctree)/tools/make/usb-bootloader.py
+	$(DFU_UTIL) -d 0483:df11 -a 0 -s 0x08004000:leave -D cf2-2022.12.bin
 
 #uses the dfu utility to flash the firmware at 0x08004000, just after the bootloader
 #call this target directly if CF cannont be flashed automatically through flash_dfu

@@ -185,7 +185,7 @@ static void sendLppShort(dwDevice_t *dev, lpsLppShortPacket_t *packet)
   dwStartTransmit(dev);
 }
 
-static uint8_t buffered_mac[8][8] = {'\0','\0','\0','\0','\0','\0','\0','\0'};
+static uint8_t buffered_mac[8][8] = {{'\0'},{'\0'},{'\0'},{'\0'},{'\0'},{'\0'},{'\0'},{'\0'}};
 static float buffered_m[8][3];
 
 // this is supposed to be sent by LPP, but here we buffered to save memory since we know they don't change. TODO: dynamic buffer
@@ -283,7 +283,7 @@ static bool isGoodKey(md5_byte_t *keybyte, uint8_t anchorId) {
   md5_byte_t itrating_keybyte = *keybyte;
     for (uint8_t i = 0; i <= ITERATIONS_TO_FIND_K0; i++) {
         md5_byte_t output[16];
-        genMD5(&itrating_keybyte, 1, &output);
+        genMD5(&itrating_keybyte, 1, output);
         if (output[0] == commitments[anchorId] || output[0] == k0s[anchorId]) {
           if (!isLastKeyByte(*keybyte)) {
             commitments[anchorId] = *keybyte; // update key commitment
@@ -346,7 +346,7 @@ static bool rxcallback(dwDevice_t *dev) {
           prevCounter = tesla_counter;
         }
 
-        if (anchor == 4 && tesla_init && (tesla_counter - prevCounter > 10000)) { // wait 10 secs after init
+        if (tesla_init && (tesla_counter - prevCounter > 10000)) { // wait 10 secs after init
             if (anchor < LOCODECK_NR_OF_TDOA2_ANCHORS) {
                 
                 const uint8_t *data = &rxPacket.payload[LPS_TDOA2_LPP_TYPE];

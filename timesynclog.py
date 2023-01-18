@@ -23,32 +23,37 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
 Simple example that connects to the first Crazyflie found, and then sends the
-resync signals to all anchors. 
+reboot signals to 6 anchors ID from 0 to 5. The reset signals is sent
+10 times in a row to make sure all anchors are reset to bootloader.
 """
 import logging
 import time
 from threading import Thread
 from threading import Timer
-import csv
-
 import cflib
 from cflib.crazyflie import Crazyflie
 from cflib.utils import uri_helper
 from cflib.crazyflie.log import LogConfig
-
 #from lpslib.lopoanchor import LoPoAnchor
-import time
 import struct
+import csv
+import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 
 shouldSync = True
-samplingRate = 40 # in ms
-duration = 60*5 # in seconds
+samplingRate = 20 # in ms
+logDelay = 20 # in seconds
+numberOfSamples = 10000
+duration = logDelay + numberOfSamples * samplingRate / 1000 # in seconds
+resync_period = 1000 # in ms
 row_list = [["timestamp", "pose.x", "pose.y"]]
 logging.basicConfig(level=logging.ERROR)
 
+cftimestamp = 0
+
 class LoPoAnchor():
     LPP_TYPE_INIT_TESLA = 6 # lpp.h
-    
+
     def __init__(self, crazyflie):
         """
         :param crazyflie: A crazyflie object to be used as a bridge to the LoPo
@@ -59,7 +64,8 @@ class LoPoAnchor():
         for i in range(8):
             data = struct.pack('<BL', LoPoAnchor.LPP_TYPE_INIT_TESLA, time) 
             self.crazyflie.loc.send_short_lpp_packet(i, data)
-            print(f"sent 'resync tesla_counter' to anchor '{i}'")
+            #print(f"sent 'resync tesla_counter' to anchor '{i}'")
+        print("resync sent")
             
             
 uri = uri_helper.uri_from_env(default='usb://0')
@@ -74,14 +80,11 @@ class SYNCLOG:
         """ Initialize and run the example with the specified link_uri """
 
         self._cf = Crazyflie()
-
         self._cf.connected.add_callback(self._connected)
         self._cf.disconnected.add_callback(self._disconnected)
         self._cf.connection_failed.add_callback(self._connection_failed)
         self._cf.connection_lost.add_callback(self._connection_lost)
-
         self._cf.open_link(link_uri)
-
         self._cf.console.receivedChar.add_callback(console_callback)
 
         print('Connecting to %s' % link_uri)
@@ -95,13 +98,12 @@ class SYNCLOG:
     def _connected(self, link_uri):
         """ This callback is called form the Crazyflie API when a Crazyflie
         has been connected and the TOCs have been downloaded."""
-
-        if shouldSync:
-            Thread(target=self._sync_thread).start()
+        Thread(target=self._sync_thread).start()
         self._cf.console.receivedChar.add_callback(console_callback)
         self._lg_stab = LogConfig(name='Stabilizer', period_in_ms=samplingRate)
         self._lg_stab.add_variable('stateEstimate.x', 'float')
         self._lg_stab.add_variable('stateEstimate.y', 'float')
+        #self._lg_stab.add_variable('stateEstimate.z', 'float')
         # The fetch-as argument can be set to FP16 to save space in the log packet
         self._lg_stab.add_variable('pm.vbat', 'FP16')
         
@@ -122,26 +124,37 @@ class SYNCLOG:
         except AttributeError:
             print('Could not add Stabilizer log config, bad configuration.')
             
-        # Start a timer to disconnect in 10s
-        t = Timer(duration, self.saveAndClose)
-        t.start()
+        # save and close after the duration
+            #t = Timer(duration, self.saveAndClose)
+            #t.start()
         
     def saveAndClose(self):
-        filename = ("posesample-" + time.strftime('%b-%d-%Y_%H%M', time.localtime()) + ".csv")
+        filename = ("samples/posesample-" + time.strftime('%b-%d-%Y_%H%M', time.localtime())+ "-SYNC.csv" if shouldSync else ".csv")
         with open(filename, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerows(row_list)
         print("done")
-        time.sleep(1)
+        row_list.pop(0)
+        xs = list(map(lambda n: n[1], row_list))
+        ys = list(map(lambda n: n[2], row_list))
+        plt.scatter(xs, ys,s=1)
+        plt.savefig(filename+'.png')
+        #plt.show()
         self._cf.close_link()
+        
             
     def _stab_log_error(self, logconf, msg):
         """Callback from the log API when an error occurs"""
         print('Error when logging %s: %s' % (logconf.name, msg))
         
     def _stab_log_data(self, timestamp, data, logconf):
-        row = [timestamp,data["stateEstimate.x"],data["stateEstimate.y"]]
-        row_list.append(row)
+        global cftimestamp
+        cftimestamp = timestamp
+        if counter > logDelay*1000:
+            row = [timestamp,data["stateEstimate.x"],data["stateEstimate.y"]]
+            row_list.append(row)
+            if len(row_list) > numberOfSamples:
+                self.saveAndClose()
             
     def _connection_failed(self, link_uri, msg):
         """Callback when connection initial connection fails (i.e no Crazyflie
@@ -158,17 +171,17 @@ class SYNCLOG:
         print('Disconnected from %s' % link_uri)
 
     def _sync_thread(self):
-        resync_period = 1000 # 1 sec        
         global counter
-
         while True:
             counter += 1
             time.sleep(0.001)
             if (counter%1000==0):
                 print("server counter is "+str(counter))
-            if (counter%resync_period==0):
+                print("timestamp is " + str(cftimestamp))
+            if (counter%resync_period==0 and shouldSync):
                 anchors = LoPoAnchor(self._cf)
                 anchors.init_tesla(counter)
+                
 
 def console_callback(text: str):
     '''A callback to run when we get console text from Crazyflie'''

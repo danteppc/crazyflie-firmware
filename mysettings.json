@@ -1,0 +1,34 @@
+{
+    "editor.fontSize": 18,
+    "dafny.basePath": 
+"/Users/mahyar/.vscode/extensions/correctnesslab.dafny-vscode-0.18.0/dafny/dafny",
+    "python.pythonPath": "/usr/bin/python3",
+    "launch": {
+        "configurations": [
+
+            {
+                "showDevDebugOutput": "raw",
+                "name": "Cortex Debug",
+                "cwd": "${workspaceRoot}",
+                "executable": "./cf2.elf",
+                "request": "launch",
+                "type": "cortex-debug",
+                "device": "STM32F405",
+                "svdFile": "STM32F405.svd",
+                "servertype": "openocd",
+                "configFiles": ["./jlink.cfg", "target/stm32f4x.cfg"],
+                "runToMain": true,
+                "preLaunchCommands": [
+                    "set mem inaccessible-by-default off",
+                    "enable breakpoint",
+                    "monitor reset"
+                ]
+            }
+        ]
+    },
+    "C_Cpp.updateChannel": "Insiders",
+    "security.workspace.trust.untrustedFiles": "open",
+    "editor.minimap.enabled": false,
+    "window.zoomLevel": 1,
+    "workbench.colorTheme": "Visual Studio Light - C++"
+}

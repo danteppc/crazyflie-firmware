@@ -390,14 +390,14 @@ static void teslaTask (void *p) {
 
 static const int period = 10 * 1000; // 10 sec
 
-static int roundToNearestMultiple(int n) {
+/*static int roundToNearestMultiple(int n) {
 	// Smaller multiple 
 	int a = (n / period) * period;
 	// Larger multiple 
 	int b = a + period;
 	// Return of closest of two 
 	return (n - a > b - n) ? b : a;
-}
+}*/
 
 bool lpsSendLppShort(uint8_t destId, void* data, size_t length)
 {
