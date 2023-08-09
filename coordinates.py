@@ -60,6 +60,7 @@ for index, a in enumerate(anchors):
 
 tag = Tag(0,0,0)
 
+ax.set_proj_type('persp', focal_length=0.1)  # FOV = 90 deg
 ax.scatter(tag.x,tag.y,tag.z,s=50,c="black",marker="^")
 ax.text(tag.x+X_TEXTPAD,tag.y,tag.z+Z_TEXTPAD,str(tag))
 ax.margins(0.3)

@@ -35,8 +35,9 @@ from cflib.crazyflie import Crazyflie
 from cflib.utils import uri_helper
 from lpslib.lopoanchor import LoPoAnchor
 import time
+import yaml
 
-uri = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E7E7')
+uri = uri_helper.uri_from_env(default='radio://0/80/250K/E7E7E7E7E7')
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -101,14 +102,26 @@ class LpsRebootToBootloader:
         #anchors.set_position(5, (-1.0, 1.0, 0.0))
         #anchors.set_position(6, (1.0, 1.0, 1.0))
         #anchors.set_position(7, (1.0, -1.0, 0.0))
-        anchors.set_position(0, (10,10,0))
-        anchors.set_position(1, (10,10,0))
-        anchors.set_position(2, (10,10,0))
-        anchors.set_position(3, (10,10,0))
-        anchors.set_position(4, (10,10,0))
-        anchors.set_position(5, (10,10,0))
-        anchors.set_position(6, (10,10,0))
-        anchors.set_position(7, (10,10,0))
+        
+                
+        with open('/Users/mahyar/Developer/crazyflie/new_coordinate_system_update.yaml', 'r') as f:
+            data = yaml.safe_load(f)
+            
+        print(data)
+        
+        for key, value in data.items():
+            
+            anchors.set_position(int(key), (value['x'],value['y'],value['z']))
+            
+            
+            #anchors.set_position(0, (-2.1230,-3.6221,0.3586))
+            #anchors.set_position(1, (-2.0414,4.0449,3.0240))
+            #anchors.set_position(2, (2.6391,3.4173,0.3626))
+            #anchors.set_position(3, (2.5791,-3.4709,3.1023))
+            #anchors.set_position(4, (-1.9667,-3.6053,2.9467))
+            #anchors.set_position(5, (-2.2824,3.4097,0.3657))
+            #anchors.set_position(6, (2.6057,3.9284,2.8900))
+            #anchors.set_position(7, (2.6056,-2.9680,0.3632))
         #anchors.set_position(1, (10,10,10))
         #anchors.set_position(2, (10,10,10))
         #anchors.set_position(3, (10,10,10))

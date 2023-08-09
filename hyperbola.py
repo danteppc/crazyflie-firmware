@@ -16,10 +16,25 @@ for i in range(len(measurements)):
 	
 speed = 299792458 # m/s
 
+measurements = [
+	[1,3,0],
+	[6,2,0],
+	[1,1,0]
+]
+
+#measurements = [
+#	[87,62,0],
+#	[87,764,0],
+#	[1660,62,0],
+#	[1660,764,0]
+#	
+#]
+
 
 import numpy as np
 
 def functions(x0, y0, x1, y1, x2, y2, d01, d02, d12):
+	print(x2,y2)
 	""" Given observers at (x0, y0), (x1, y1), (x2, y2) and TDOA between observers d01, d02, d12, this closure
 		returns a function that evaluates the system of three hyperbolae for given event x, y.
 	"""
@@ -108,6 +123,11 @@ t0 = d0 / speed
 t1 = d1 / speed
 t2 = d2 / speed
 
+
+print("x0="+str(x))
+print("y0="+str(y))
+
+print("distances:")
 print(d0)
 print(d1)
 print(d2)
@@ -128,7 +148,7 @@ plt.scatter(x0, y0,s=200,c='darkorange',marker='*',zorder=1)
 plt.scatter(x1, y1,s=200,c='gold',zorder=1)
 plt.scatter(x2, y2,s=200,c='violet',zorder=1)
 
-plt.savefig('hyperbola.pdf')
+plt.savefig('hyperbola_spoofed.pdf')
 plt.show()
 
 

@@ -26,6 +26,7 @@ Simple example that connects to the first Crazyflie found, and then sends the
 reboot signals to 6 anchors ID from 0 to 5. The reset signals is sent
 10 times in a row to make sure all anchors are reset to bootloader.
 """
+
 import logging
 import time
 from threading import Thread
@@ -38,15 +39,31 @@ from cflib.crazyflie.log import LogConfig
 import struct
 import csv
 import matplotlib.pyplot as plt
+import pandas as pd
+import sys
+from cflib.utils.power_switch import PowerSwitch
+import numpy as np
+import scipy.stats as stats
+import scipy
+from scipy.interpolate import make_interp_spline, BSpline
+import questionnaire as qs
+from cflib.crazyflie.mem import MemoryElement
+
+
+#address = 'usb://0'
+#PowerSwitch(address).stm_power_cycle()
+#time.sleep(1)
+address = 'usb://0'#radio://0/80/250K/E7E7E7E7E7'
+
 plt.switch_backend('agg')
 
-shouldSync = True
+shouldSync = False
 samplingRate = 20 # in ms
-logDelay = 20 # in seconds
+logDelay = 0 # in seconds
 numberOfSamples = 10000
 duration = logDelay + numberOfSamples * samplingRate / 1000 # in seconds
 resync_period = 1000 # in ms
-row_list = [["timestamp", "pose.x", "pose.y"]]
+row_list = [["timestamp", "pose.x", "pose.y","pose.z"]]
 logging.basicConfig(level=logging.ERROR)
 
 cftimestamp = 0
@@ -68,7 +85,7 @@ class LoPoAnchor():
         print("resync sent")
             
             
-uri = uri_helper.uri_from_env(default='usb://0')
+uri = uri_helper.uri_from_env(default=address)
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -103,6 +120,8 @@ class SYNCLOG:
         self._lg_stab = LogConfig(name='Stabilizer', period_in_ms=samplingRate)
         self._lg_stab.add_variable('stateEstimate.x', 'float')
         self._lg_stab.add_variable('stateEstimate.y', 'float')
+        self._lg_stab.add_variable('stateEstimate.z', 'float')
+        
         #self._lg_stab.add_variable('stateEstimate.z', 'float')
         # The fetch-as argument can be set to FP16 to save space in the log packet
         self._lg_stab.add_variable('pm.vbat', 'FP16')
@@ -124,19 +143,28 @@ class SYNCLOG:
         except AttributeError:
             print('Could not add Stabilizer log config, bad configuration.')
             
+        mem = self._cf.mem.get_mems(MemoryElement.TYPE_LOCO)
+        
+        print(mem)
         # save and close after the duration
             #t = Timer(duration, self.saveAndClose)
             #t.start()
         
     def saveAndClose(self):
-        filename = ("samples/posesample-" + time.strftime('%b-%d-%Y_%H%M', time.localtime())+ "-SYNC.csv" if shouldSync else ".csv")
-        with open(filename, 'w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerows(row_list)
+        filename = ("samples/posesample-" + time.strftime('%b-%d-%Y_%H%M', time.localtime())+ ("-SYNC.csv" if shouldSync else ".csv"))
+        
+        df = pd.DataFrame(row_list[1:], columns=row_list[0])
+        
+        print('saving '+filename)
+        
+        df.to_csv(filename, index=False)
+        
         print("done")
         row_list.pop(0)
         xs = list(map(lambda n: n[1], row_list))
         ys = list(map(lambda n: n[2], row_list))
+        zs = list(map(lambda n: n[3], row_list))
+        
         plt.scatter(xs, ys,s=1)
         plt.savefig(filename+'.png')
         #plt.show()
@@ -151,9 +179,10 @@ class SYNCLOG:
         global cftimestamp
         cftimestamp = timestamp
         if counter > logDelay*1000:
-            row = [timestamp,data["stateEstimate.x"],data["stateEstimate.y"]]
+            row = [timestamp,data["stateEstimate.x"],data["stateEstimate.y"],data["stateEstimate.z"]]
             row_list.append(row)
             if len(row_list) > numberOfSamples:
+                print(row_list)
                 self.saveAndClose()
             
     def _connection_failed(self, link_uri, msg):
@@ -183,6 +212,7 @@ class SYNCLOG:
                 anchors.init_tesla(counter)
                 
 
+
 def console_callback(text: str):
     '''A callback to run when we get console text from Crazyflie'''
     # We do not add newlines to the text received, we get them from the
@@ -193,4 +223,5 @@ if __name__ == '__main__':
     # Initialize the low-level drivers
     cflib.crtp.init_drivers()
     le = SYNCLOG(uri)
+    
     

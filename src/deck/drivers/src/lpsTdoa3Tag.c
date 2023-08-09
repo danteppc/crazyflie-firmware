@@ -274,6 +274,11 @@ static void sendTdoaToEstimatorCallback(tdoaMeasurement_t* tdoaMeasurement) {
   heightData.stdDev = 0.0001;
   estimatorEnqueueAbsoluteHeight(&heightData);
   #endif
+
+    // TODO: log
+    //const uint8_t idA = tdoaMeasurement->anchorIds[0];
+    //const uint8_t idB = tdoaMeasurement->anchorIds[1];
+    //tdoaMeasurement->distanceDiff
 }
 
 static bool getAnchorPosition(const uint8_t anchorId, point_t* position) {
