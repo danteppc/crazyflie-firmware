@@ -95,6 +95,19 @@ LOG_ADD(LOG_UINT16, tof, &tdoaEngineState.stats.tof)
  * A is selected using the tdoaEngine.logId parameter and B is selected by tdoaEngine.logOthrId.
  */
 LOG_ADD(LOG_FLOAT, tdoa, &tdoaEngineState.stats.tdoa)
+
+LOG_ADD(LOG_FLOAT, distanceDiff, &tdoaEngineState.tdoaMeasurement.distanceDiff)
+LOG_ADD(LOG_INT8, anchorIdA, &tdoaEngineState.tdoaMeasurement.anchorIdA)
+LOG_ADD(LOG_INT8, anchorIdB, &tdoaEngineState.tdoaMeasurement.anchorIdB)
+LOG_ADD(LOG_FLOAT, anchorPosAx, &tdoaEngineState.tdoaMeasurement.anchorPositionA.x)
+LOG_ADD(LOG_FLOAT, anchorPosAy, &tdoaEngineState.tdoaMeasurement.anchorPositionA.y)
+LOG_ADD(LOG_FLOAT, anchorPosAz, &tdoaEngineState.tdoaMeasurement.anchorPositionA.z)
+LOG_ADD(LOG_UINT32, anchorPosAt, &tdoaEngineState.tdoaMeasurement.anchorPositionA.timestamp)
+LOG_ADD(LOG_FLOAT, anchorPosBx, &tdoaEngineState.tdoaMeasurement.anchorPositionB.x)
+LOG_ADD(LOG_FLOAT, anchorPosBy, &tdoaEngineState.tdoaMeasurement.anchorPositionB.y)
+LOG_ADD(LOG_FLOAT, anchorPosBz, &tdoaEngineState.tdoaMeasurement.anchorPositionB.z)
+LOG_ADD(LOG_UINT32, anchorPosBt, &tdoaEngineState.tdoaMeasurement.anchorPositionB.timestamp)
+
 LOG_GROUP_STOP(tdoaEngine)
 
 /**

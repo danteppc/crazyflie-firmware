@@ -84,7 +84,8 @@ static void enqueueTDOA(const tdoaAnchorContext_t* anchorACtx, const tdoaAnchorC
     }
     tdoa.anchorIds[0] = idA;
     tdoa.anchorIds[1] = idB;
-
+    
+    engineState->tdoaMeasurement = tdoa;
     engineState->sendTdoaToEstimator(&tdoa);
   }
 }
@@ -237,3 +238,4 @@ void tdoaEngineProcessPacketFiltered(tdoaEngineState_t* engineState, tdoaAnchorC
     }
   }
 }
+

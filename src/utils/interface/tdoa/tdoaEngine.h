@@ -35,6 +35,9 @@ typedef struct {
     uint8_t id[REMOTE_ANCHOR_DATA_COUNT];
     uint8_t offset;
   } matching;
+    
+  tdoaMeasurement_t tdoaMeasurement;
+
 } tdoaEngineState_t;
 
 void tdoaEngineInit(tdoaEngineState_t* state, const uint32_t now_ms, tdoaEngineSendTdoaToEstimator sendTdoaToEstimator, const double locodeckTsFreq, const tdoaEngineMatchingAlgorithm_t matchingAlgorithm);
