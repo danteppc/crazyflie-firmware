@@ -3,8 +3,13 @@
 
 #include "tdoaStorage.h"
 #include "tdoaStats.h"
+#include "autoconf.h"
 
+#if CONFIG_DECK_LOCO_LONGER_RANGE
+#define TDOA_ENGINE_MEASUREMENT_NOISE_STD 0.30f
+#else
 #define TDOA_ENGINE_MEASUREMENT_NOISE_STD 0.15f
+#endif
 
 typedef void (*tdoaEngineSendTdoaToEstimator)(tdoaMeasurement_t* tdoaMeasurement);
 
@@ -30,6 +35,9 @@ typedef struct {
     uint8_t id[REMOTE_ANCHOR_DATA_COUNT];
     uint8_t offset;
   } matching;
+    
+  tdoaMeasurement_t tdoaMeasurement;
+
 } tdoaEngineState_t;
 
 void tdoaEngineInit(tdoaEngineState_t* state, const uint32_t now_ms, tdoaEngineSendTdoaToEstimator sendTdoaToEstimator, const double locodeckTsFreq, const tdoaEngineMatchingAlgorithm_t matchingAlgorithm);
