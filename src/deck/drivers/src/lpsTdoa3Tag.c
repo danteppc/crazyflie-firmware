@@ -100,6 +100,9 @@ typedef struct {
 static lpsLppShortPacket_t lppPacket;
 
 static bool rangingOk;
+
+static uint8_t activeAnchorsCount = 0;
+
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
 
 static bool isValidTimeStamp(const int64_t anchorRxTime) {
@@ -276,6 +279,11 @@ static void sendTdoaToEstimatorCallback(tdoaMeasurement_t* tdoaMeasurement) {
   heightData.stdDev = 0.0001;
   estimatorEnqueueAbsoluteHeight(&heightData);
   #endif
+
+    // TODO: log
+    //const uint8_t idA = tdoaMeasurement->anchorIds[0];
+    //const uint8_t idB = tdoaMeasurement->anchorIds[1];
+    //tdoaMeasurement->distanceDiff
 }
 
 static bool getAnchorPosition(const uint8_t anchorId, point_t* position) {
@@ -297,7 +305,9 @@ static uint8_t getAnchorIdList(uint8_t unorderedAnchorList[], const int maxListS
 
 static uint8_t getActiveAnchorIdList(uint8_t unorderedAnchorList[], const int maxListSize) {
   uint32_t now_ms = T2M(xTaskGetTickCount());
-  return tdoaStorageGetListOfActiveAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize, now_ms);
+  uint32_t count = tdoaStorageGetListOfActiveAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize, now_ms);
+  activeAnchorsCount = count;
+  return count;
 }
 
 static void Initialize(dwDevice_t *dev) {
@@ -336,3 +346,9 @@ PARAM_GROUP_START(tdoa3)
 PARAM_ADD(PARAM_FLOAT, stddev, &stdDev)
 
 PARAM_GROUP_STOP(tdoa3)
+
+LOG_GROUP_START(tdoa3)
+
+LOG_ADD(LOG_UINT8, aacount, &activeAnchorsCount)
+
+LOG_GROUP_STOP(tdoa3)

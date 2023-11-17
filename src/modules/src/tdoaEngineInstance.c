@@ -108,6 +108,8 @@ LOG_ADD(LOG_FLOAT, anchorPosBy, &tdoaEngineState.tdoaMeasurement.anchorPositionB
 LOG_ADD(LOG_FLOAT, anchorPosBz, &tdoaEngineState.tdoaMeasurement.anchorPositionB.z)
 LOG_ADD(LOG_UINT32, anchorPosBt, &tdoaEngineState.tdoaMeasurement.anchorPositionB.timestamp)
 
+
+
 LOG_GROUP_STOP(tdoaEngine)
 
 /**
