@@ -180,7 +180,7 @@ static void extPositionHandler(CRTPPacket* pk) {
   ext_pos.source = MeasurementSourceLocationService;
   updateLogFromExtPos();
 
-  estimatorEnqueuePosition(&ext_pos);
+  // estimatorEnqueuePosition(&ext_pos);
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -328,7 +328,7 @@ static void extPositionPackedHandler(CRTPPacket* pk)
     ext_pos.source = MeasurementSourceLocationService;
     if (item->id == my_id) {
       updateLogFromExtPos();
-      estimatorEnqueuePosition(&ext_pos);
+      // estimatorEnqueuePosition(&ext_pos);
       tickOfLastPacket = xTaskGetTickCount();
     }
     else {
