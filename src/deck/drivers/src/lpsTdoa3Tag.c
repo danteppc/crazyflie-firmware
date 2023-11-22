@@ -101,7 +101,9 @@ static lpsLppShortPacket_t lppPacket;
 
 static bool rangingOk;
 
-static uint16_t activeAnchors = 0;
+static uint16_t activeAnchors = 1;
+static uint16_t anchorsCount = 0;
+static uint16_t activeAnchorsCount = 0;
 
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
 
@@ -300,17 +302,19 @@ static bool getAnchorPosition(const uint8_t anchorId, point_t* position) {
 }
 
 static uint8_t getAnchorIdList(uint8_t unorderedAnchorList[], const int maxListSize) {
-  return tdoaStorageGetListOfAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize);
+  anchorsCount = tdoaStorageGetListOfAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize);
+    return anchorsCount;
 }
 
 static uint8_t getActiveAnchorIdList(uint8_t unorderedAnchorList[], const int maxListSize) {
   uint32_t now_ms = T2M(xTaskGetTickCount());
-  uint32_t count = tdoaStorageGetListOfActiveAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize, now_ms);
-  activeAnchors = 0;
-  for (int i = 0; i < sizeof(unorderedAnchorList); i++) {
-      activeAnchors |= 0b1 << unorderedAnchorList[i];
+  activeAnchorsCount = tdoaStorageGetListOfActiveAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize, now_ms);
+  uint16_t flags = 0;
+  for (int i = 0; i < activeAnchorsCount; i++) {
+      flags |= 1 << unorderedAnchorList[i];
   }
-  return count;
+  activeAnchors = flags;
+  return activeAnchorsCount;
 }
 
 static void Initialize(dwDevice_t *dev) {
@@ -353,5 +357,7 @@ PARAM_GROUP_STOP(tdoa3)
 LOG_GROUP_START(tdoa3)
 
 LOG_ADD(LOG_UINT16, activeanchors, &activeAnchors)
+LOG_ADD(LOG_UINT8, aacount, &activeAnchorsCount)
+LOG_ADD(LOG_UINT8, acount, &anchorsCount)
 
 LOG_GROUP_STOP(tdoa3)
