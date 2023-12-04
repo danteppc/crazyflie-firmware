@@ -180,7 +180,7 @@ static void extPositionHandler(CRTPPacket* pk) {
   ext_pos.source = MeasurementSourceLocationService;
   updateLogFromExtPos();
 
-  estimatorEnqueuePosition(&ext_pos);
+  // estimatorEnqueuePosition(&ext_pos);
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -197,7 +197,7 @@ static void extPoseHandler(const CRTPPacket* pk) {
   ext_pose.stdDevPos = extPosStdDev;
   ext_pose.stdDevQuat = extQuatStdDev;
 
-  estimatorEnqueuePose(&ext_pose);
+  //estimatorEnqueuePose(&ext_pose);
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -212,7 +212,7 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
       ext_pose.stdDevPos = extPosStdDev;
       ext_pose.stdDevQuat = extQuatStdDev;
-      estimatorEnqueuePose(&ext_pose);
+      //estimatorEnqueuePose(&ext_pose);
       tickOfLastPacket = xTaskGetTickCount();
     } else {
       ext_pos.x = item->x / 1000.0f;
@@ -328,7 +328,7 @@ static void extPositionPackedHandler(CRTPPacket* pk)
     ext_pos.source = MeasurementSourceLocationService;
     if (item->id == my_id) {
       updateLogFromExtPos();
-      estimatorEnqueuePosition(&ext_pos);
+      // estimatorEnqueuePosition(&ext_pos);
       tickOfLastPacket = xTaskGetTickCount();
     }
     else {

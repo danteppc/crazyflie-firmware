@@ -61,6 +61,7 @@ The implementation must handle
 #define DEBUG_MODULE "TDOA3"
 #include "debug.h"
 #include "cfassert.h"
+#include "eventtrigger.h"
 
 // Positions for sent LPP packets
 #define LPS_TDOA3_TYPE 0
@@ -69,6 +70,8 @@ The implementation must handle
 #define PACKET_TYPE_TDOA3 0x30
 
 #define TDOA3_RECEIVE_TIMEOUT 10000
+
+EVENTTRIGGER(intentionChanged, uint8, intent)
 
 typedef struct {
   uint8_t type;
@@ -100,7 +103,13 @@ typedef struct {
 static lpsLppShortPacket_t lppPacket;
 
 static bool rangingOk;
+
+static uint16_t activeAnchors = 0;
+static uint16_t anchorsCount = 0;
+static uint16_t activeAnchorsCount = 0;
+
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
+static uint8_t intention = 0;
 
 static bool isValidTimeStamp(const int64_t anchorRxTime) {
   return anchorRxTime != 0;
@@ -297,12 +306,19 @@ static bool getAnchorPosition(const uint8_t anchorId, point_t* position) {
 }
 
 static uint8_t getAnchorIdList(uint8_t unorderedAnchorList[], const int maxListSize) {
-  return tdoaStorageGetListOfAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize);
+  anchorsCount = tdoaStorageGetListOfAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize);
+    return anchorsCount;
 }
 
 static uint8_t getActiveAnchorIdList(uint8_t unorderedAnchorList[], const int maxListSize) {
   uint32_t now_ms = T2M(xTaskGetTickCount());
-  return tdoaStorageGetListOfActiveAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize, now_ms);
+  activeAnchorsCount = tdoaStorageGetListOfActiveAnchorIds(tdoaEngineState.anchorInfoArray, unorderedAnchorList, maxListSize, now_ms);
+  uint16_t flags = 0;
+  for (int i = 0; i < activeAnchorsCount; i++) {
+      flags |= 1 << unorderedAnchorList[i];
+  }
+  activeAnchors = flags;
+  return activeAnchorsCount;
 }
 
 static void Initialize(dwDevice_t *dev) {
@@ -325,6 +341,14 @@ static bool isRangingOk()
   return rangingOk;
 }
 
+void setIntentionCallback(void)
+{
+    // The parameter has been updated before the callback and the new parameter value can be used
+    eventTrigger_intentionChanged_payload.intent = intention;
+    eventTrigger(&eventTrigger_intentionChanged);
+
+}
+
 uwbAlgorithm_t uwbTdoa3TagAlgorithm = {
   .init = Initialize,
   .onEvent = onEvent,
@@ -339,5 +363,15 @@ PARAM_GROUP_START(tdoa3)
  * @brief The measurement noise to use when sending TDoA measurements to the estimator.
  */
 PARAM_ADD(PARAM_FLOAT, stddev, &stdDev)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, intent, &intention, &setIntentionCallback)
+
 
 PARAM_GROUP_STOP(tdoa3)
+
+LOG_GROUP_START(tdoa3)
+
+LOG_ADD(LOG_UINT16, activeanchors, &activeAnchors)
+LOG_ADD(LOG_UINT8, aacount, &activeAnchorsCount)
+LOG_ADD(LOG_UINT8, acount, &anchorsCount)
+
+LOG_GROUP_STOP(tdoa3)
