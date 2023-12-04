@@ -61,6 +61,7 @@ The implementation must handle
 #define DEBUG_MODULE "TDOA3"
 #include "debug.h"
 #include "cfassert.h"
+#include "eventtrigger.h"
 
 // Positions for sent LPP packets
 #define LPS_TDOA3_TYPE 0
@@ -69,6 +70,8 @@ The implementation must handle
 #define PACKET_TYPE_TDOA3 0x30
 
 #define TDOA3_RECEIVE_TIMEOUT 10000
+
+EVENTTRIGGER(intentionChanged, uint8, intent)
 
 typedef struct {
   uint8_t type;
@@ -101,11 +104,12 @@ static lpsLppShortPacket_t lppPacket;
 
 static bool rangingOk;
 
-static uint16_t activeAnchors = 1;
+static uint16_t activeAnchors = 0;
 static uint16_t anchorsCount = 0;
 static uint16_t activeAnchorsCount = 0;
 
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
+static uint8_t intention = 0;
 
 static bool isValidTimeStamp(const int64_t anchorRxTime) {
   return anchorRxTime != 0;
@@ -337,6 +341,14 @@ static bool isRangingOk()
   return rangingOk;
 }
 
+void setIntentionCallback(void)
+{
+    // The parameter has been updated before the callback and the new parameter value can be used
+    eventTrigger_intentionChanged_payload.intent = intention;
+    eventTrigger(&eventTrigger_intentionChanged);
+
+}
+
 uwbAlgorithm_t uwbTdoa3TagAlgorithm = {
   .init = Initialize,
   .onEvent = onEvent,
@@ -351,6 +363,8 @@ PARAM_GROUP_START(tdoa3)
  * @brief The measurement noise to use when sending TDoA measurements to the estimator.
  */
 PARAM_ADD(PARAM_FLOAT, stddev, &stdDev)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, intent, &intention, &setIntentionCallback)
+
 
 PARAM_GROUP_STOP(tdoa3)
 
