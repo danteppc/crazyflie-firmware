@@ -5,6 +5,12 @@
         "**/bower_components": true
     },
     "files.associations": {
-        "bootloader.h": "c"
-    }
+        "bootloader.h": "c",
+        "cstdint": "c",
+        "__locale": "cpp",
+        "cmath": "c",
+        "compare": "c",
+        "complex": "c"
+    },
+    "cortex-debug.variableUseNaturalFormat": true
 }

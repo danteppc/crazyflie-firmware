@@ -71,13 +71,20 @@ The implementation must handle
 
 #define TDOA3_RECEIVE_TIMEOUT 10000
 
+#define TIME_SCALEDOWN_FACTOR 1e3
+#define SCALEDDOWN_UINT32_MAX (UINT32_MAX/TIME_SCALEDOWN_FACTOR)
+#define GET_STD_TIME(time, wrapovers) ((time)/TIME_SCALEDOWN_FACTOR + (wrapovers)*SCALEDDOWN_UINT32_MAX)
+#define SECS_PER_WRAP 17.2074010256
+#define STD_TIME_TO_SEC(time) (((time)/SCALEDDOWN_UINT32_MAX)*SECS_PER_WRAP)
 EVENTTRIGGER(intentionChanged, uint8, intent)
+EVENTTRIGGER(syncStartTimeSet, uint32, syncStartTime)
 
 typedef struct {
   uint8_t type;
   uint8_t seq;
   uint32_t txTimeStamp;
   uint8_t remoteCount;
+  uint32_t globalTime;
 } __attribute__((packed)) rangePacketHeader3_t;
 
 typedef struct {
@@ -107,6 +114,10 @@ static bool rangingOk;
 static uint16_t activeAnchors = 0;
 static uint16_t anchorsCount = 0;
 static uint16_t activeAnchorsCount = 0;
+static float syncTime = 0;
+static uint32_t syncMsgCounter = 0;
+static uint32_t syncStartTime = 0;
+static float syncResidual = 0;
 
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
 static uint8_t intention = 0;
@@ -175,6 +186,12 @@ static void handleLppPacket(const int dataLength, int rangePacketLength, const p
   }
 }
 
+static uint32_t _lastRX = 0;
+static uint8_t _rxWrapovers = 0;
+static int32_t gOffset;
+static float lastClockCorrection;
+static float syncError;
+
 static void rxcallback(dwDevice_t *dev) {
   tdoaStats_t* stats = &tdoaEngineState.stats;
   STATS_CNT_RATE_EVENT(&stats->packetsReceived);
@@ -189,20 +206,48 @@ static void rxcallback(dwDevice_t *dev) {
   dwGetReceiveTimestamp(dev, &arrival);
   const int64_t rxAn_by_T_in_cl_T = arrival.full;
 
+  _rxWrapovers = _lastRX > arrival.high32 ? _rxWrapovers + 1 : _rxWrapovers;
+
+  _lastRX = arrival.high32;
+
+  const uint32_t localTime = GET_STD_TIME(_lastRX, _rxWrapovers);
+
   const rangePacket3_t* packet = (rangePacket3_t*)rxPacket.payload;
   if (packet->header.type == PACKET_TYPE_TDOA3) {
     const int64_t txAn_in_cl_An = packet->header.txTimeStamp;;
     const uint8_t seqNr = packet->header.seq & 0x7f;;
-
+    const uint32_t incomingGlobalTime = packet->header.globalTime;
+        
     tdoaAnchorContext_t anchorCtx;
     uint32_t now_ms = T2M(xTaskGetTickCount());
 
     tdoaEngineGetAnchorCtxForPacketProcessing(&tdoaEngineState, anchorId, now_ms, &anchorCtx);
     int rangeDataLength = updateRemoteData(&anchorCtx, packet);
-    tdoaEngineProcessPacket(&tdoaEngineState, &anchorCtx, txAn_in_cl_An, rxAn_by_T_in_cl_T);
+    bool timeIsGood = tdoaEngineProcessPacket(&tdoaEngineState, &anchorCtx, txAn_in_cl_An, rxAn_by_T_in_cl_T);
+
     tdoaStorageSetRxTxData(&anchorCtx, rxAn_by_T_in_cl_T, txAn_in_cl_An, seqNr);
     handleLppPacket(dataLength, rangeDataLength, &rxPacket, &anchorCtx);
+    double clockCorrection = tdoaStorageGetClockCorrection(&anchorCtx);
+    lastClockCorrection = clockCorrection;
+    if (timeIsGood && anchorId >= 8 && incomingGlobalTime != 0) {
 
+    if (gOffset) {
+        static double residualSum = 0;
+        double cTimeOld = STD_TIME_TO_SEC(localTime * lastClockCorrection + gOffset);
+        int32_t offset = incomingGlobalTime - localTime;
+        double cTimeNew = STD_TIME_TO_SEC(localTime * clockCorrection + offset);
+        syncResidual = (float)(cTimeNew-cTimeOld);
+        double residual = pow(cTimeNew-cTimeOld, 2.0);
+        residualSum+= residual;
+        if (STD_TIME_TO_SEC(localTime-syncStartTime) < 3600) { // 10 min
+          syncError = sqrtf(residualSum/++syncMsgCounter);
+        }
+    } else {
+      syncStartTime = localTime;
+    }
+      gOffset = incomingGlobalTime - localTime;
+      syncTime = STD_TIME_TO_SEC(localTime * clockCorrection + gOffset);
+    }
     rangingOk = true;
   }
 }
@@ -349,6 +394,14 @@ void setIntentionCallback(void)
 
 }
 
+void setSyncStartTimeCallback(void)
+{
+    // The parameter has been updated before the callback and the new parameter value can be used
+    eventTrigger_syncStartTimeSet_payload.syncStartTime = syncStartTime;
+    eventTrigger(&eventTrigger_syncStartTimeSet);
+
+}
+
 uwbAlgorithm_t uwbTdoa3TagAlgorithm = {
   .init = Initialize,
   .onEvent = onEvent,
@@ -364,6 +417,7 @@ PARAM_GROUP_START(tdoa3)
  */
 PARAM_ADD(PARAM_FLOAT, stddev, &stdDev)
 PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, intent, &intention, &setIntentionCallback)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT32, startSyncTime, &syncStartTime, &setSyncStartTimeCallback)
 
 
 PARAM_GROUP_STOP(tdoa3)
@@ -373,5 +427,9 @@ LOG_GROUP_START(tdoa3)
 LOG_ADD(LOG_UINT16, activeanchors, &activeAnchors)
 LOG_ADD(LOG_UINT8, aacount, &activeAnchorsCount)
 LOG_ADD(LOG_UINT8, acount, &anchorsCount)
+LOG_ADD(LOG_FLOAT, synctime, &syncTime)
+LOG_ADD(LOG_FLOAT, syncrmse, &syncError)
+LOG_ADD(LOG_UINT32, syncmsgcount, &syncMsgCounter)
+LOG_ADD(LOG_FLOAT, syncresidual, &syncResidual)
 
 LOG_GROUP_STOP(tdoa3)
