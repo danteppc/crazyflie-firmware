@@ -93,6 +93,8 @@ static lpsAlgoOptions_t algoOptions = {
   // .userRequestedMode is the wanted algorithm, available as a parameter
 #if defined(CONFIG_DECK_LOCO_ALGORITHM_TDOA2)
   .userRequestedMode = lpsMode_TDoA2,
+    .userRequestedMode = lpsMode_TDoA2,
+
 #elif defined(CONFIG_DECK_LOCO_ALGORITHM_TDOA3)
   .userRequestedMode = lpsMode_TDoA3,
 #elif defined(CONFIG_DECK_LOCO_ALGORITHM_TWR)
@@ -116,6 +118,7 @@ struct {
   [lpsMode_TDoA2] = {.algorithm = &uwbTdoa2TagAlgorithm, .name="TDoA2"},
   [lpsMode_TDoA3] = {.algorithm = &uwbTdoa3TagAlgorithm, .name="TDoA3"},
 };
+
 
 #if defined(CONFIG_DECK_LOCO_ALGORITHM_TDOA2)
 static uwbAlgorithm_t *algorithm = &uwbTdoa2TagAlgorithm;
@@ -377,9 +380,46 @@ static void uwbTask(void* parameters) {
 
 static lpsLppShortPacket_t lppShortPacket;
 
+TaskHandle_t teslaTaskHandle = NULL;
+
+static void teslaTask (void *p) {
+    while (1) {
+        vTaskDelay(100);
+	      tesla_counter+=100;
+        //if (tesla_counter%1000 == 0)
+          //DEBUG_PRINT("tesla time = %lu \r\n",tesla_counter);
+    }
+    vTaskDelete(teslaTaskHandle);
+}
+
+static const int period = 10 * 1000; // 10 sec
+
+/*static int roundToNearestMultiple(int n) {
+	// Smaller multiple 
+	int a = (n / period) * period;
+	// Larger multiple 
+	int b = a + period;
+	// Return of closest of two 
+	return (n - a > b - n) ? b : a;
+}*/
+
 bool lpsSendLppShort(uint8_t destId, void* data, size_t length)
 {
   bool result = false;
+
+  const uint8_t * _data = (const uint8_t *) data;
+
+  uint8_t type = _data[0];
+  if (type == LPP_SHORT_INIT_TESLA) {
+    uint32_t val;
+    memcpy(&val,&_data[1],sizeof(uint32_t));
+    tesla_counter = val;
+    if (tesla_init == false) {
+      tesla_init = true;
+    } else {
+      // val ? roundToNearestMultiple(tesla_counter) : 0;  
+    }
+  }
 
   if (isInit)
   {
@@ -548,6 +588,9 @@ static void dwm1000Init(DeckInfo *info)
   xTaskCreate(uwbTask, LPS_DECK_TASK_NAME, LPS_DECK_STACKSIZE, NULL,
                     LPS_DECK_TASK_PRI, &uwbTaskHandle);
 
+  xTaskCreate(teslaTask, "teslaTask", configMINIMAL_STACK_SIZE, NULL,
+                    configMAX_PRIORITIES - 1, &teslaTaskHandle);
+  
   isInit = true;
 }
 

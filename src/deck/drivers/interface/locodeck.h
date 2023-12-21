@@ -125,10 +125,25 @@ void locoDeckSetRangingState(const uint16_t newState);
 
 #define LPP_SHORT_ANCHORPOS 0x01
 
+#define LPP_SHORT_INIT_TESLA 0x06
+
+//extern bool tesla_activated;
+
+
 struct lppShortAnchorPos_s {
   float x;
   float y;
   float z;
+  uint8_t phash[8];
+  uint8_t hash[8];
+  uint8_t key[8];
+  uint32_t tesla_counter;
+    uint32_t currentInterval;
+    uint8_t currentKeyByte;
+
 } __attribute__((packed));
 
+struct lppShortInitTESLA_s {
+    uint32_t timestamp;
+} __attribute__((packed));
 #endif // __LOCODECK_H__
