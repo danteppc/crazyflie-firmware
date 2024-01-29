@@ -41,6 +41,8 @@
 #include "libdw1000.h"
 #include "stabilizer_types.h"
 
+#include "md5.h"
+
 // Timestamp counter frequency
 #define LOCODECK_TS_FREQ (499.2e6 * 128)
 
@@ -127,20 +129,18 @@ void locoDeckSetRangingState(const uint16_t newState);
 
 #define LPP_SHORT_INIT_TESLA 0x06
 
-//extern bool tesla_activated;
+#define HASH_LEN 16
 
+//extern bool tesla_activated;
 
 struct lppShortAnchorPos_s {
   float x;
   float y;
   float z;
-  uint8_t phash[8];
-  uint8_t hash[8];
-  uint8_t key[8];
-  uint32_t tesla_counter;
-    uint32_t currentInterval;
-    uint8_t currentKeyByte;
-
+  uint8_t interval;
+  md5_byte_t mac[HASH_LEN];
+  md5_byte_t disclosedKey[HASH_LEN];
+  //md5_byte_t nextConstellationHash[8];
 } __attribute__((packed));
 
 struct lppShortInitTESLA_s {

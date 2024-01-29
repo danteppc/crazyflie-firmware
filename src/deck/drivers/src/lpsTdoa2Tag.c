@@ -307,10 +307,10 @@ static uint32_t prevCounter = 0;
 static md5_byte_t currentKey[8] = {'0','0','0','0','0','0','0','0'};
 static uint32_t currentInterval = 1;
 
-static uint32_t anchorTeslaCounter = 0;
+//static uint32_t anchorTeslaCounter = 0;
 
-static uint32_t currentIntervalLoco = 0;
-static md5_byte_t currentKeyLoco;
+//static uint32_t currentIntervalLoco = 0;
+//static md5_byte_t currentKeyLoco;
 
 
 static bool rxcallback(dwDevice_t *dev) {
@@ -351,17 +351,17 @@ static bool rxcallback(dwDevice_t *dev) {
                 uint8_t type = data[0];
                 if (type == LPP_SHORT_ANCHORPOS) {
                     struct lppShortAnchorPos_s *newpos = (struct lppShortAnchorPos_s*)&data[1];
-                    anchorTeslaCounter = newpos->tesla_counter;
-                    currentIntervalLoco = newpos->currentInterval;
-                    currentKeyLoco = newpos->currentKeyByte;
+                    //anchorTeslaCounter = newpos->tesla_counter;
+                    //currentIntervalLoco = newpos->currentInterval;
+                    //currentKeyLoco = newpos->currentKeyByte;
                     if (*buffered_mac[anchor] == '\0') { // is empty
-                        memcpy(buffered_mac[anchor], newpos->hash, 8);
+                        memcpy(buffered_mac[anchor], newpos->mac, 8);
                         buffered_m[anchor][0] = newpos->x;
                         buffered_m[anchor][1] = newpos->y;
                         buffered_m[anchor][2] = newpos->z;
                         return lppSent;
                     } else { // intention: it cannot be the case that buffer is null but a key has not been disclosed
-                        if (isGoodKey(&newpos->key[0], anchor) == false) {
+                        if (isGoodKey(&newpos->disclosedKey[0], anchor) == false) {
                             return lppSent;
                         }
                         currentInterval = MAX((uint32_t)(tesla_counter/1000),1);
@@ -371,13 +371,13 @@ static bool rxcallback(dwDevice_t *dev) {
                         hmac_md5((unsigned char *)newpos, 12+8, currentKey, 8, digest);
                         // we actually need to do h(buffered_m[anchor]) || buffered_mac[anchor] == digest but we skip this in our experiment, TODO: do it properly
                         //if (memcmp(digest, buffered_mac[anchor], 8) == 0) {
-                        if (memcmp(digest, newpos->hash, 8) == 0) {
+                        if (memcmp(digest, newpos->mac, 8) == 0) {
                             // authentic
                             passed_packets++;
-                            memcpy(buffered_mac[anchor], newpos->hash, 8);
+                            memcpy(buffered_mac[anchor], newpos->mac, 8);
                         } else {
                             unpassed_packets++;
-                            memcpy(buffered_mac[anchor], newpos->hash, 8);
+                            memcpy(buffered_mac[anchor], newpos->mac, 8);
                             return lppSent; //mismatch
                         }
                     }
@@ -547,7 +547,7 @@ static void lpsHandleLppShortPacket(const uint8_t srcId, const uint8_t *data, td
       struct lppShortAnchorPos_s *newpos = (struct lppShortAnchorPos_s*)&data[1];
       tdoaStorageSetAnchorPosition(anchorCtx, newpos->x, newpos->y, newpos->z);
       if (srcId == 3) { // why 3?
-        if (newpos->hash) {
+        if (newpos->mac) {
           //got it!
         }
       }
@@ -601,7 +601,7 @@ LOG_ADD(LOG_UINT32, teslaIntervalCF, &currentInterval)
 LOG_ADD(LOG_UINT8, teslaKeyCF, &currentKey[0])
 LOG_ADD(LOG_UINT16, teslaMsgsAuthCount, &passed_packets)
 //LOG_ADD(LOG_UINT16, teslaMsgsUnauthCount, &unpassed_packets)
-LOG_ADD(LOG_UINT32, teslaCounterLoco, &anchorTeslaCounter)
+//LOG_ADD(LOG_UINT32, teslaCounterLoco, &anchorTeslaCounter)
 LOG_ADD(LOG_UINT16, teslaUnpassed, &unpassed_packets)
 
 //LOG_ADD(LOG_UINT8, teslaKeyLoco, currentKeyByte)

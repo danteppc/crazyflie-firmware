@@ -492,11 +492,33 @@ void populateKeys(char keys[100][16], int count) {
 		md5_finish(&hash_state, output);
 	}
 	
+void printKey(md5_byte_t *key) {
+	for (int i = 0; i < 16; i++)
+		printf("0x%02x, ", key[i]);
+	putchar('\n');
+}
 	
 int main(int argc, char *argv[]) {
 	const char ids[8] = {'0','1','2','3','4','5','6','7'};
 	const int len = 16;
 	md5_byte_t keychain[len] = {'\0'}; // 50 lpp/s over 10 minutes of keysize 8
+	
+	
+	const int keychainSize = 200;
+	md5_byte_t skeychain[keychainSize+1][16] = {'\0'}; // last one is commitment and unused
+
+
+	md5_byte_t s = 0x0;
+	genMD5(&s, 1, skeychain[0]);
+	
+	printf("s = 0x0 \n");
+
+	for (int i = 1; i < keychainSize+2;i++) {
+		genMD5(skeychain[i-1], 16, skeychain[i]);
+		i < keychainSize+1 ? printf("key at %d = ", i-1) : printf("commitment = 0x");		
+		printKey(skeychain[i-1]);
+	}
+
 	for (int index = 0; index < 8;index++) {
 		keychain[0]=ids[index];
 		for (int i = 1; i < len; i++) {

@@ -44,6 +44,7 @@ The implementation must handle
 
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -62,6 +63,9 @@ The implementation must handle
 #include "debug.h"
 #include "cfassert.h"
 #include "eventtrigger.h"
+#include "hmac_md5.h"
+
+#include "queue.h"
 
 // Positions for sent LPP packets
 #define LPS_TDOA3_TYPE 0
@@ -76,6 +80,15 @@ The implementation must handle
 #define GET_STD_TIME(time, wrapovers) ((time)/TIME_SCALEDOWN_FACTOR + (wrapovers)*SCALEDDOWN_UINT32_MAX)
 #define SECS_PER_WRAP 17.2074010256
 #define STD_TIME_TO_SEC(time) (((time)/SCALEDDOWN_UINT32_MAX)*SECS_PER_WRAP)
+
+#define KEYCHAIN_SIZE 200
+#define TDOAS_FREQ 10.0
+#define TDOAS_PER_SEC (1.0/TDOAS_FREQ)
+#define LIFESPAN ((uint16_t)(KEYCHAIN_SIZE*TDOAS_PER_SEC))
+//#define MAX_INTERVAL ((uint16_t)(KEYCHAIN_SIZE/TDOAS_PER_SEC))
+#define LAST_KEY_INDEX (KEYCHAIN_SIZE - 1)
+#define DISCLOSURE_DELAY 1
+
 EVENTTRIGGER(intentionChanged, uint8, intent)
 EVENTTRIGGER(syncStartTimeSet, uint32, syncStartTime)
 
@@ -105,6 +118,10 @@ typedef struct {
   uint8_t remoteAnchorData;
 } __attribute__((packed)) rangePacket3_t;
 
+typedef struct {
+  tdoaMeasurement_t tdoaMeasurement;
+  struct lppShortAnchorPos_s lastLPP[16];
+} MLPP_t;
 
 // Outgoing LPP packet
 static lpsLppShortPacket_t lppPacket;
@@ -121,6 +138,88 @@ static float syncResidual = 0;
 
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
 static uint8_t intention = 0;
+
+struct lppShortAnchorPos_s lastLPP[16] = {0};
+
+//tdoaMeasurement_t lastMeasurement = {0};
+
+#define KEY201 {0x0e,0x0a,0x65,0x85,0x26,0x0b,0x06,0x37,0x31,0x0f,0x9b,0x3a,0x52,0x4b,0x5d,0x49}
+#define KEY51 {0x29,0xcf,0xc6,0x31,0xdc,0xd7,0x5c,0x96,0xc3,0xc7,0x25,0x29,0xed,0x87,0x61,0xf2}
+
+static const md5_byte_t k0[HASH_LEN]   = KEY201;
+static md5_byte_t commitment[HASH_LEN] = KEY201;
+
+static md5_byte_t keychain[KEYCHAIN_SIZE][HASH_LEN] = {0};
+
+static uint32_t _lastRX = 0;
+static uint8_t _rxWrapovers = 0;
+static int32_t lastOffset = 0;
+static float lastClockCorrection;
+static float syncError;
+
+static uint32_t authCount = 0;
+static uint32_t measCount = 0;
+static uint32_t lppTypeCount = 0;
+static uint32_t lppHeaderCount = 0;
+static uint32_t lppLengthyCount = 0;
+static uint32_t goodLppCount = 0;
+static uint32_t pCount = 0;
+static uint32_t goodInterval = 0;
+
+static QueueHandle_t teslaQueue;
+
+static void genMD5(md5_byte_t *input, uint8_t len, md5_byte_t *output) {
+  md5_state_t hash_state;
+  md5_init(&hash_state);
+  md5_append(&hash_state, input, len);
+  md5_finish(&hash_state, output);
+}
+
+
+
+static uint8_t getCurrentMockIntervalBasedOnLastInfo() {
+  //return 1;
+    double time = syncTime;
+    uint16_t whole = (uint16_t)time;
+    uint16_t centi = (time - whole) * 100;
+    uint16_t cyclic = whole % LIFESPAN;
+    uint16_t scaled = centi + cyclic * 100;
+    uint8_t interval = scaled * TDOAS_PER_SEC;
+    return interval;
+}
+
+static uint8_t getKeyIndexFor(uint8_t interval) {
+  return (LAST_KEY_INDEX - interval) % KEYCHAIN_SIZE;
+}
+
+static uint8_t getPreviousKeyIndexFor(uint8_t interval) {
+      uint8_t keyIndex;
+      int prevI = interval-DISCLOSURE_DELAY;
+      if (prevI < 0) {
+        keyIndex = getKeyIndexFor(KEYCHAIN_SIZE+prevI);
+      } else {
+        keyIndex = getKeyIndexFor(prevI);
+      }
+      return keyIndex;
+}
+
+static uint8_t currentInterval = 0;
+
+static int keyCount;
+static bool isGoodKey(md5_byte_t *key) {
+    keyCount = 0;
+    md5_byte_t output[HASH_LEN];
+    genMD5(key, HASH_LEN, output);
+    for (uint8_t i = 0; i <= KEYCHAIN_SIZE; i++) {
+      keyCount++;
+        if (memcmp(output, commitment, HASH_LEN) == 0 || memcmp(output, k0, HASH_LEN) == 0) { // match
+            memcpy(commitment, key, HASH_LEN);
+            return true;
+        }
+        genMD5(&output, HASH_LEN, output);
+    }
+    return false;
+}
 
 static bool isValidTimeStamp(const int64_t anchorRxTime) {
   return anchorRxTime != 0;
@@ -166,7 +265,18 @@ static void handleLppShortPacket(tdoaAnchorContext_t* anchorCtx, const uint8_t *
   uint8_t type = data[0];
 
   if (type == LPP_SHORT_ANCHORPOS) {
+    lppTypeCount++;
     struct lppShortAnchorPos_s *newpos = (struct lppShortAnchorPos_s*)&data[1];
+    uint8_t anchorId = tdoaStorageGetId(anchorCtx);
+    if (isGoodKey(newpos->disclosedKey)) {
+      goodLppCount++;
+      // this packet is revealing the key used in previous interval, hence (I-d)
+      uint8_t keyIndex = getPreviousKeyIndexFor(newpos->interval);
+      memcpy(keychain[keyIndex], newpos->disclosedKey, HASH_LEN);
+      size_t len = sizeof(struct lppShortAnchorPos_s);
+      memcpy(&lastLPP[anchorId], newpos, len);
+      memcpy(&lastLPP[anchorId], newpos, len);
+    }
     tdoaStorageSetAnchorPosition(anchorCtx, newpos->x, newpos->y, newpos->z);
   }
 }
@@ -178,19 +288,20 @@ static void handleLppPacket(const int dataLength, int rangePacketLength, const p
   const int32_t lppTypeInPayload = startOfLppDataInPayload + 1;
 
   if (lppDataLength > 0) {
+    lppLengthyCount++;
     const uint8_t lppPacketHeader = rxPacket->payload[startOfLppDataInPayload];
     if (lppPacketHeader == LPP_HEADER_SHORT_PACKET) {
+      lppHeaderCount++;
       const int32_t lppTypeAndPayloadLength = lppDataLength - 1;
       handleLppShortPacket(anchorCtx, &rxPacket->payload[lppTypeInPayload], lppTypeAndPayloadLength);
     }
   }
 }
 
-static uint32_t _lastRX = 0;
-static uint8_t _rxWrapovers = 0;
-static int32_t gOffset;
-static float lastClockCorrection;
-static float syncError;
+
+struct BufferedPacket {
+    packet_t packet;
+} __attribute__((packed));
 
 static void rxcallback(dwDevice_t *dev) {
   tdoaStats_t* stats = &tdoaEngineState.stats;
@@ -211,8 +322,9 @@ static void rxcallback(dwDevice_t *dev) {
   _lastRX = arrival.high32;
 
   const uint32_t localTime = GET_STD_TIME(_lastRX, _rxWrapovers);
-
+    
   const rangePacket3_t* packet = (rangePacket3_t*)rxPacket.payload;
+
   if (packet->header.type == PACKET_TYPE_TDOA3) {
     const int64_t txAn_in_cl_An = packet->header.txTimeStamp;;
     const uint8_t seqNr = packet->header.seq & 0x7f;;
@@ -223,17 +335,17 @@ static void rxcallback(dwDevice_t *dev) {
 
     tdoaEngineGetAnchorCtxForPacketProcessing(&tdoaEngineState, anchorId, now_ms, &anchorCtx);
     int rangeDataLength = updateRemoteData(&anchorCtx, packet);
+      
     bool timeIsGood = tdoaEngineProcessPacket(&tdoaEngineState, &anchorCtx, txAn_in_cl_An, rxAn_by_T_in_cl_T);
 
     tdoaStorageSetRxTxData(&anchorCtx, rxAn_by_T_in_cl_T, txAn_in_cl_An, seqNr);
-    handleLppPacket(dataLength, rangeDataLength, &rxPacket, &anchorCtx);
     double clockCorrection = tdoaStorageGetClockCorrection(&anchorCtx);
     lastClockCorrection = clockCorrection;
-    if (timeIsGood && anchorId >= 8 && incomingGlobalTime != 0) {
+    if (timeIsGood && anchorId >= 8 && incomingGlobalTime != 0) { // TODO: remove anchorId constraint after flash all anchors
 
-    if (gOffset) {
+    if (lastOffset) {
         static double residualSum = 0;
-        double cTimeOld = STD_TIME_TO_SEC(localTime * lastClockCorrection + gOffset);
+        double cTimeOld = STD_TIME_TO_SEC(localTime * lastClockCorrection + lastOffset);
         int32_t offset = incomingGlobalTime - localTime;
         double cTimeNew = STD_TIME_TO_SEC(localTime * clockCorrection + offset);
         syncResidual = (float)(cTimeNew-cTimeOld);
@@ -245,11 +357,16 @@ static void rxcallback(dwDevice_t *dev) {
     } else {
       syncStartTime = localTime;
     }
-      gOffset = incomingGlobalTime - localTime;
-      syncTime = STD_TIME_TO_SEC(localTime * clockCorrection + gOffset);
+      lastOffset = incomingGlobalTime - localTime;
+      syncTime = STD_TIME_TO_SEC(localTime * clockCorrection + lastOffset);
     }
+
+    pCount++;
+    handleLppPacket(dataLength, rangeDataLength, &rxPacket, &anchorCtx);
+
     rangingOk = true;
   }
+
 }
 
 static void setRadioInReceiveMode(dwDevice_t *dev) {
@@ -317,11 +434,98 @@ static uint32_t onEvent(dwDevice_t *dev, uwbEvent_t event) {
   return MAX_TIMEOUT;
 }
 
+
+typedef struct nav_s {
+  float position[3];
+  uint8_t I;
+} nav_t;
+
+static nav_t getPosI(point_t *p, uint8_t I) {
+  nav_t nav = {p->x, p->y, p->z , I};
+  return nav;
+}
+static int qRs = 0;
+static int qSs = 0;
 static void sendTdoaToEstimatorCallback(tdoaMeasurement_t* tdoaMeasurement) {
   // Override the default standard deviation set by the TDoA engine.
   tdoaMeasurement->stdDev = stdDev;
 
-  estimatorEnqueueTDOA(tdoaMeasurement);
+  measCount++;
+/*
+  if (xQueueSend(teslaQueue, tdoaMeasurement, 0) == pdTRUE) {
+    return;    
+  }
+
+  tdoaMeasurement_t lastMeasurement;
+  if (xQueueReceive(teslaQueue, &lastMeasurement, 0) == pdFALSE) {
+    return;
+  }
+*/
+
+
+/*
+  tdoaMeasurement_t lastMeasurement;
+  if (xQueueReceive(teslaQueue, &lastMeasurement, 0) == pdFALSE) {
+    if (xQueueSend(teslaQueue, tdoaMeasurement, 0) == pdTRUE) {
+      qSs++;
+    }
+    return;
+  }
+  qRs++;
+  */
+
+tdoaMeasurement_t lastMeasurement = *tdoaMeasurement;
+
+  // check if an entry exists in buffer
+
+      currentInterval = getCurrentMockIntervalBasedOnLastInfo();
+
+      const uint8_t idA = lastMeasurement.anchorIdA;
+      const uint8_t idB = lastMeasurement.anchorIdB;
+
+      uint8_t intervalA = lastLPP[idA].interval;
+      uint8_t intervalB = lastLPP[idB].interval;
+
+      int deltaA = currentInterval - intervalA;
+      int deltaB = currentInterval - intervalB;
+
+      md5_byte_t _macA[HASH_LEN];
+      md5_byte_t _macB[HASH_LEN];
+
+      memcpy(_macA, lastLPP[idA].mac, HASH_LEN);
+      memcpy(_macB, lastLPP[idB].mac, HASH_LEN);
+
+      // only consider subsequent packets
+      //if ((deltaA == 1 && deltaB == 1)) {
+
+      //  goodInterval++;
+
+        nav_t navA = getPosI(&lastMeasurement.anchorPositionA, intervalA);
+        nav_t navB = getPosI(&lastMeasurement.anchorPositionB, intervalB);
+
+        md5_byte_t macA[HASH_LEN];
+        md5_byte_t macB[HASH_LEN];
+
+        uint8_t keyIndexA = getKeyIndexFor(intervalA);
+        md5_byte_t *keyA = keychain[keyIndexA];
+
+        uint8_t keyIndexB = getKeyIndexFor(intervalB);
+        md5_byte_t *keyB = keychain[keyIndexB];
+
+        // commitment is the latest key revealed by anchors, and is thought to be the key used for macing the last packet
+        hmac_md5(navA.position, 12, keyA, HASH_LEN, macA);
+        hmac_md5(navB.position, 12, keyB, HASH_LEN, macB);
+
+        // does the mac done by disclosed key match the mac in the buffered mac?
+        if ( !(memcmp(_macA, macA, HASH_LEN) || memcmp(_macB, macB, HASH_LEN)) ) {
+          estimatorEnqueueTDOA(&lastMeasurement);
+          authCount++;
+        }
+    //}
+
+  //memcpy(&lastMeasurement, tdoaMeasurement, sizeof(tdoaMeasurement_t));
+
+
 
   #ifdef CONFIG_DECK_LOCO_2D_POSITION
   heightMeasurement_t heightData;
@@ -379,6 +583,8 @@ static void Initialize(dwDevice_t *dev) {
   dwCommitConfiguration(dev);
 
   rangingOk = false;
+  teslaQueue = xQueueCreate(2, sizeof(tdoaMeasurement_t));
+
 }
 
 static bool isRangingOk()
