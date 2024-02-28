@@ -66,6 +66,7 @@ The implementation must handle
 #include "hmac_md5.h"
 
 #include "queue.h"
+#include "timers.h"
 
 // Positions for sent LPP packets
 #define LPS_TDOA3_TYPE 0
@@ -82,11 +83,12 @@ The implementation must handle
 #define STD_TIME_TO_SEC(time) (((time)/SCALEDDOWN_UINT32_MAX)*SECS_PER_WRAP)
 
 #define KEYCHAIN_SIZE 200
-#define TDOAS_FREQ 10.0
-#define TDOAS_PER_SEC (1.0/TDOAS_FREQ)
-#define LIFESPAN ((uint16_t)(KEYCHAIN_SIZE*TDOAS_PER_SEC))
+#define DATA_FREQ 10.0
+#define DATA_PER_SEC (1.0/DATA_FREQ)
+#define LIFESPAN ((uint16_t)(KEYCHAIN_SIZE*DATA_PER_SEC))
 //#define MAX_INTERVAL ((uint16_t)(KEYCHAIN_SIZE/TDOAS_PER_SEC))
 #define LAST_KEY_INDEX (KEYCHAIN_SIZE - 1)
+#define INTERVAL_LEN_IN_MS (DATA_PER_SEC*1000)
 #define DISCLOSURE_DELAY 1
 
 EVENTTRIGGER(intentionChanged, uint8, intent)
@@ -150,6 +152,7 @@ static const md5_byte_t k0[HASH_LEN]   = KEY201;
 static md5_byte_t commitment[HASH_LEN] = KEY201;
 
 static md5_byte_t keychain[KEYCHAIN_SIZE][HASH_LEN] = {0};
+static bool disclosedKeychain[KEYCHAIN_SIZE] = {0};
 
 static uint32_t _lastRX = 0;
 static uint8_t _rxWrapovers = 0;
@@ -158,6 +161,7 @@ static float lastClockCorrection;
 static float syncError;
 
 static uint32_t authCount = 0;
+static uint32_t unauthCount = 0;
 static uint32_t measCount = 0;
 static uint32_t lppTypeCount = 0;
 static uint32_t lppHeaderCount = 0;
@@ -175,16 +179,15 @@ static void genMD5(md5_byte_t *input, uint8_t len, md5_byte_t *output) {
   md5_finish(&hash_state, output);
 }
 
-
-
 static uint8_t getCurrentMockIntervalBasedOnLastInfo() {
   //return 1;
     double time = syncTime;
     uint16_t whole = (uint16_t)time;
+    //return whole % LIFESPAN;
     uint16_t centi = (time - whole) * 100;
     uint16_t cyclic = whole % LIFESPAN;
     uint16_t scaled = centi + cyclic * 100;
-    uint8_t interval = scaled * TDOAS_PER_SEC;
+    uint8_t interval = scaled * DATA_PER_SEC;
     return interval;
 }
 
@@ -201,6 +204,23 @@ static uint8_t getPreviousKeyIndexFor(uint8_t interval) {
         keyIndex = getKeyIndexFor(prevI);
       }
       return keyIndex;
+}
+bool memeqzero(const void *data, size_t length)
+{
+	const unsigned char *p = data;
+	size_t len;
+
+	/* Check first 16 bytes manually */
+	for (len = 0; len < 16; len++) {
+		if (!length)
+			return true;
+		if (*p)
+			return false;
+		p++;
+		length--;
+	}
+	/* Now we know that's zero, memcmp with self. */
+	return memcmp(data, p, length) == 0;
 }
 
 static uint8_t currentInterval = 0;
@@ -260,6 +280,67 @@ static int updateRemoteData(tdoaAnchorContext_t* anchorCtx, const void* payload)
 
   return (uint8_t*)anchorDataPtr - (uint8_t*)packet;
 }
+static uint8_t disclosureCount = 0;
+static uint8_t currentKeyIndex = 0;
+
+static uint8_t bufferCount = 0;
+
+
+
+typedef struct {
+  int num;
+  struct lppShortAnchorPos_s
+} StructWrapper;
+
+
+typedef struct nav_s {
+  float position[3];
+  uint8_t I;
+} nav_t;
+
+static nav_t getPosI(point_t *p, uint8_t I) {
+  nav_t nav = {p->x, p->y, p->z , I};
+  return nav;
+}
+
+void myTimerCallback(TimerHandle_t xTimer) {
+
+    bufferCount--;
+
+    uint8_t anchorId = (uint8_t)pvTimerGetTimerID(xTimer);
+
+    tdoaAnchorContext_t anchorCtx;
+    uint32_t now_ms = T2M(xTaskGetTickCount()); // TODO: investigate impact of delay
+    tdoaEngineGetAnchorCtxForPacketProcessing(&tdoaEngineState, anchorId, now_ms, &anchorCtx);
+
+
+    struct lppShortAnchorPos_s *lpp = &lastLPP[anchorId];
+    uint8_t interval = lpp->interval;
+
+    struct lppShortAnchorPos_s *newpos;// = pvTimerGetTimerID(xTimer);
+    md5_byte_t mac[HASH_LEN];   
+    uint8_t newKeyIndex = getKeyIndexFor(interval);
+    md5_byte_t *key = keychain[newKeyIndex];   
+    hmac_md5(lpp, 12, key, HASH_LEN, mac);
+
+    // test
+    tdoaStorageSetAnchorPosition(&anchorCtx, lpp->x, lpp->y, lpp->z);
+
+
+    if (memcmp(lpp->mac, mac, HASH_LEN) == 0 ) {
+      authCount++;
+      //tdoaStorageSetAnchorPosition(&anchorCtx, lpp->x, lpp->y, lpp->z);
+    } else {
+      unauthCount++;
+    }
+
+    memset(lpp, 0, sizeof(struct lppShortAnchorPos_s));
+
+    xTimerDelete(xTimer, 0);
+
+   // free(timerData);
+}
+
 
 static void handleLppShortPacket(tdoaAnchorContext_t* anchorCtx, const uint8_t *data, const int length) {
   uint8_t type = data[0];
@@ -272,12 +353,52 @@ static void handleLppShortPacket(tdoaAnchorContext_t* anchorCtx, const uint8_t *
       goodLppCount++;
       // this packet is revealing the key used in previous interval, hence (I-d)
       uint8_t keyIndex = getPreviousKeyIndexFor(newpos->interval);
+      currentKeyIndex = keyIndex;
+      if (memcmp(keychain[keyIndex], newpos->disclosedKey,HASH_LEN ) != 0 ) { // different than what we already know
+        disclosureCount++;
+      }
+      disclosedKeychain[keyIndex] = true;
       memcpy(keychain[keyIndex], newpos->disclosedKey, HASH_LEN);
+      memcpy(keychain[keyIndex], newpos->disclosedKey, HASH_LEN);
+      if (keyIndex < KEYCHAIN_SIZE-2) { // just to fill potentially missing ones
+        genMD5(keychain[keyIndex],HASH_LEN,keychain[keyIndex+1]);
+        genMD5(keychain[keyIndex+1],HASH_LEN,keychain[keyIndex+2]);
+        disclosedKeychain[keyIndex+1] = true;
+        disclosedKeychain[keyIndex+2] = true;
+      }
+
+
+      // temp
+      tdoaStorageSetAnchorPosition(&anchorCtx, newpos->x, newpos->y, newpos->z);
+
       size_t len = sizeof(struct lppShortAnchorPos_s);
-      memcpy(&lastLPP[anchorId], newpos, len);
-      memcpy(&lastLPP[anchorId], newpos, len);
+      struct lppShortAnchorPos_s emptyStruct = {0};
+
+      /*    
+      if (memeqzero(&lastLPP[anchorId], len)) { // set only if zero
+        memcpy(&lastLPP[anchorId], newpos, len);   
+            bufferCount++;
+            //pdMS_TO_TICKS(INTERVAL_LEN_IN_MS*2)
+          TimerHandle_t newTimer = xTimerCreate("MyTimer", pdMS_TO_TICKS(0), pdFALSE, (void *)anchorId, myTimerCallback);
+          if (newTimer != NULL) {
+              // Start the timer with the desired delay
+              xTimerStart(newTimer, 0);
+          } else {
+              // Timer creation failed
+              //free(timerData); // Cleanup allocated memory in case of failure
+          }
+      }
+      */
+      //memcpy(&lastLPP[anchorId], newpos, len);
+    
+    
+    //
+    // TODO: auth here
+   // vTaskDelay(pdMS_TO_TICKS(INTERVAL_LEN_IN_MS*2));  // WARNING: fix 2x  
+      currentInterval = getCurrentMockIntervalBasedOnLastInfo();
+
+
     }
-    tdoaStorageSetAnchorPosition(anchorCtx, newpos->x, newpos->y, newpos->z);
   }
 }
 
@@ -313,6 +434,11 @@ static void rxcallback(dwDevice_t *dev) {
   dwGetData(dev, (uint8_t*)&rxPacket, dataLength);
   const uint8_t anchorId = rxPacket.sourceAddress & 0xff;
 
+      // TODO: remove
+    if (anchorId < 8) {
+      return;
+    }
+
   dwTime_t arrival = {.full = 0};
   dwGetReceiveTimestamp(dev, &arrival);
   const int64_t rxAn_by_T_in_cl_T = arrival.full;
@@ -334,6 +460,7 @@ static void rxcallback(dwDevice_t *dev) {
     uint32_t now_ms = T2M(xTaskGetTickCount());
 
     tdoaEngineGetAnchorCtxForPacketProcessing(&tdoaEngineState, anchorId, now_ms, &anchorCtx);
+
     int rangeDataLength = updateRemoteData(&anchorCtx, packet);
       
     bool timeIsGood = tdoaEngineProcessPacket(&tdoaEngineState, &anchorCtx, txAn_in_cl_An, rxAn_by_T_in_cl_T);
@@ -359,10 +486,16 @@ static void rxcallback(dwDevice_t *dev) {
     }
       lastOffset = incomingGlobalTime - localTime;
       syncTime = STD_TIME_TO_SEC(localTime * clockCorrection + lastOffset);
-    }
 
     pCount++;
+
+
     handleLppPacket(dataLength, rangeDataLength, &rxPacket, &anchorCtx);
+
+    }
+
+    //pCount++;
+    //handleLppPacket(dataLength, rangeDataLength, &rxPacket, &anchorCtx);
 
     rangingOk = true;
   }
@@ -435,22 +568,19 @@ static uint32_t onEvent(dwDevice_t *dev, uwbEvent_t event) {
 }
 
 
-typedef struct nav_s {
-  float position[3];
-  uint8_t I;
-} nav_t;
-
-static nav_t getPosI(point_t *p, uint8_t I) {
-  nav_t nav = {p->x, p->y, p->z , I};
-  return nav;
-}
 static int qRs = 0;
 static int qSs = 0;
 static void sendTdoaToEstimatorCallback(tdoaMeasurement_t* tdoaMeasurement) {
+
+
   // Override the default standard deviation set by the TDoA engine.
   tdoaMeasurement->stdDev = stdDev;
 
+
+  estimatorEnqueueTDOA(tdoaMeasurement);
   measCount++;
+
+return;
 /*
   if (xQueueSend(teslaQueue, tdoaMeasurement, 0) == pdTRUE) {
     return;    
@@ -472,13 +602,13 @@ static void sendTdoaToEstimatorCallback(tdoaMeasurement_t* tdoaMeasurement) {
     return;
   }
   qRs++;
-  */
+*/
 
 tdoaMeasurement_t lastMeasurement = *tdoaMeasurement;
 
+
   // check if an entry exists in buffer
 
-      currentInterval = getCurrentMockIntervalBasedOnLastInfo();
 
       const uint8_t idA = lastMeasurement.anchorIdA;
       const uint8_t idB = lastMeasurement.anchorIdB;
@@ -515,11 +645,12 @@ tdoaMeasurement_t lastMeasurement = *tdoaMeasurement;
         // commitment is the latest key revealed by anchors, and is thought to be the key used for macing the last packet
         hmac_md5(navA.position, 12, keyA, HASH_LEN, macA);
         hmac_md5(navB.position, 12, keyB, HASH_LEN, macB);
-
         // does the mac done by disclosed key match the mac in the buffered mac?
         if ( !(memcmp(_macA, macA, HASH_LEN) || memcmp(_macB, macB, HASH_LEN)) ) {
           estimatorEnqueueTDOA(&lastMeasurement);
           authCount++;
+        } else {
+          unauthCount++;
         }
     //}
 

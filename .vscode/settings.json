@@ -29,7 +29,16 @@
         "unordered_map": "c",
         "vector": "c",
         "format": "c",
-        "__node_handle": "c"
+        "__node_handle": "c",
+        "__string": "c",
+        "atomic": "c",
+        "charconv": "c",
+        "cstring": "c",
+        "memory": "c",
+        "variant": "c",
+        "thread": "c",
+        "ranges": "c",
+        "utility": "c"
     },
     "cortex-debug.variableUseNaturalFormat": true
 }
