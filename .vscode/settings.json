@@ -38,7 +38,14 @@
         "variant": "c",
         "thread": "c",
         "ranges": "c",
-        "utility": "c"
+        "utility": "c",
+        "*.tcc": "c",
+        "chrono": "c",
+        "io_context": "c",
+        "timer": "c",
+        "algorithm": "c",
+        "limits": "c",
+        "numeric": "c"
     },
     "cortex-debug.variableUseNaturalFormat": true
 }
