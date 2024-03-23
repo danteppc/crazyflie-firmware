@@ -140,6 +140,7 @@ struct lppShortAnchorPos_s {
   uint8_t interval;
   md5_byte_t mac[HASH_LEN];
   md5_byte_t disclosedKey[HASH_LEN];
+  uint32_t globalTime;
   //md5_byte_t nextConstellationHash[8];
 } __attribute__((packed));
 

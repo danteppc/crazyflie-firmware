@@ -64,7 +64,7 @@ The implementation must handle
 #include "eventtrigger.h"
 #include "hmac_md5.h"
 
-// #include "queue.h"
+#include "queue.h"
 #include "timers.h"
 
 // Positions for sent LPP packets
@@ -89,9 +89,10 @@ The implementation must handle
 #define LAST_KEY_INDEX (KEYCHAIN_SIZE - 1)
 #define INTERVAL_LEN_IN_MS (DATA_PER_SEC * 1000)
 #define DISCLOSURE_DELAY 1
-#define DELAY_BEFORE_AUTH_AFTER_KEY_DISCLOSURE (INTERVAL_LEN_IN_MS)
+#define DELAY_BEFORE_AUTH_AFTER_KEY_DISCLOSURE (INTERVAL_LEN_IN_MS/2)
 #define AUTH_DELAY ((INTERVAL_LEN_IN_MS * DISCLOSURE_DELAY) + DELAY_BEFORE_AUTH_AFTER_KEY_DISCLOSURE)
 #define MISSING_KEYS_TO_RECONSTRUCT 20
+#define GOOD_KEY_LOOP_COUNT (KEYCHAIN_SIZE/20)
 
 EVENTTRIGGER(intentionChanged, uint8, intent)
 EVENTTRIGGER(syncStartTimeSet, uint32, syncStartTime)
@@ -102,7 +103,6 @@ typedef struct
   uint8_t seq;
   uint32_t txTimeStamp;
   uint8_t remoteCount;
-  uint32_t globalTime;
 } __attribute__((packed)) rangePacketHeader3_t;
 
 typedef struct
@@ -147,6 +147,7 @@ static float syncResidual = 0;
 
 static float stdDev = TDOA_ENGINE_MEASUREMENT_NOISE_STD;
 static uint8_t intention = 0;
+static uint16_t queueErrorCount = 0;
 
 struct lppShortAnchorPos_s lastLPP[16] = {0};
 
@@ -180,9 +181,11 @@ static uint32_t lppTypeCount = 0;
 static uint32_t lppHeaderCount = 0;
 static uint32_t lppLengthyCount = 0;
 static uint32_t goodLppCount = 0;
+static uint32_t badLppCount = 0;
+
 static uint32_t pCount = 0;
 
-// static QueueHandle_t teslaQueue;
+static QueueHandle_t teslaQueue;
 
 static void genMD5(md5_byte_t *input, uint8_t len, md5_byte_t *output)
 {
@@ -245,12 +248,14 @@ bool memeqzero(const void *data, size_t length)
 static uint8_t currentInterval = 0;
 
 static int keyCount;
+
+// this is a heavy procedure impacting tdaos per sec
 static bool isGoodKey(md5_byte_t *key)
 {
   keyCount = 0;
   md5_byte_t output[HASH_LEN];
   genMD5(key, HASH_LEN, output);
-  for (uint8_t i = 0; i <= KEYCHAIN_SIZE; i++)
+  for (uint8_t i = 0; i <= GOOD_KEY_LOOP_COUNT; i++)
   {
     keyCount++;
     if (memcmp(output, commitment, HASH_LEN) == 0 || memcmp(output, k0, HASH_LEN) == 0)
@@ -261,7 +266,6 @@ static bool isGoodKey(md5_byte_t *key)
     genMD5(output, HASH_LEN, output);
     // genMD5(&output, HASH_LEN, output);
   }
-  return true;
   return false;
 }
 
@@ -330,13 +334,7 @@ static nav_t getPosI(point_t *p, uint8_t I) {
 }
 */
 
-void authCallback(TimerHandle_t xTimer)
-{
-  uint8_t anchorId = (uint8_t)(uintptr_t)pvTimerGetTimerID(xTimer);
-
-  tdoaAnchorContext_t anchorCtx;
-  uint32_t now_ms = T2M(xTaskGetTickCount()); // TODO: investigate impact of delay
-  tdoaEngineGetAnchorCtxForPacketProcessing(&tdoaEngineState, anchorId, now_ms, &anchorCtx);
+static bool authenticate(uint8_t anchorId) {
 
   struct lppShortAnchorPos_s *lpp = &lastLPP[anchorId];
   uint8_t interval = lpp->interval;
@@ -346,27 +344,37 @@ void authCallback(TimerHandle_t xTimer)
   md5_byte_t *key = keychain[newKeyIndex];
   hmac_md5((md5_byte_t *)lpp, 12, key, HASH_LEN, mac);
 
-  if (memcmp(lpp->mac, mac, HASH_LEN) == 0)
-  {
+  bool match = memcmp(lpp->mac, mac, HASH_LEN) == 0;
+
+  // we're done with it, clean buffer for new data
+  memset(lpp, 0, sizeof(struct lppShortAnchorPos_s));
+
+  return match;
+  
+}
+
+static void authCallback(TimerHandle_t xTimer)
+{
+  
+  tdoaMeasurement_t measurement;
+  xQueueReceive(teslaQueue, &measurement, 0);
+  
+  bool isAuthentic = authenticate(measurement.anchorIdA) && authenticate(measurement.anchorIdB);
+  
+  if (isAuthentic) {
     authCount++;
-    tdoaStorageSetAnchorPosition(&anchorCtx, lpp->x, lpp->y, lpp->z);
-  }
-  else
-  {
+    estimatorEnqueueTDOA(&measurement);
+  } else {
     unauthCount++;
   }
 
-  tdoaStorageSetAnchorPosition(&anchorCtx, lpp->x, lpp->y, lpp->z);
-
-  // tdoaStorageSetAnchorPosition(&anchorCtx, lpp->x, lpp->y, lpp->z);
-
-  memset(lpp, 0, sizeof(struct lppShortAnchorPos_s));
   bufferCount--;
 
   xTimerDelete(xTimer, 0);
+
 }
 
-/*
+/* 2000 tdoas per sec
 static void handleLppShortPacket(tdoaAnchorContext_t* anchorCtx, const uint8_t *data, const int length) {
   uint8_t type = data[0];
 
@@ -377,15 +385,46 @@ static void handleLppShortPacket(tdoaAnchorContext_t* anchorCtx, const uint8_t *
 }
 */
 
-static void handleLppShortPacket(tdoaAnchorContext_t *anchorCtx, const uint8_t *data, const int length)
-{
+static void handleLppShortPacket(const uint32_t localTime, const bool timeIsGood, tdoaAnchorContext_t *anchorCtx, const uint8_t *data, const int length) {
+
   uint8_t type = data[0];
 
-  if (type == LPP_SHORT_ANCHORPOS)
-  {
+  if (type == LPP_SHORT_ANCHORPOS) {
     lppTypeCount++;
     struct lppShortAnchorPos_s *newpos = (struct lppShortAnchorPos_s *)&data[1];
+    tdoaStorageSetAnchorPosition(anchorCtx, newpos->x, newpos->y, newpos->z);
+    
     uint8_t anchorId = tdoaStorageGetId(anchorCtx);
+    uint32_t incomingGlobalTime = newpos->globalTime;
+    double clockCorrection = tdoaStorageGetClockCorrection(anchorCtx);
+    lastClockCorrection = clockCorrection;
+
+    // && anchorId >= 8
+    if (timeIsGood && incomingGlobalTime != 0)  { 
+      if (lastOffset) {
+        static double residualSum = 0;
+        double cTimeOld = STD_TIME_TO_SEC(localTime * lastClockCorrection + lastOffset);
+        int32_t offset = incomingGlobalTime - localTime;
+        double cTimeNew = STD_TIME_TO_SEC(localTime * clockCorrection + offset);
+        syncResidual = (float)(cTimeNew - cTimeOld);
+        double residual = pow(cTimeNew - cTimeOld, 2.0);
+        residualSum += residual;
+        if (STD_TIME_TO_SEC(localTime - syncStartTime) < 3600) { // 10 min
+          syncError = sqrtf(residualSum / ++syncMsgCounter);
+        }
+      } else {
+        syncStartTime = localTime;
+      }
+      lastOffset = incomingGlobalTime - localTime;
+      syncTime = STD_TIME_TO_SEC(localTime * clockCorrection + lastOffset);
+    }
+
+    // no impact til here
+
+    currentInterval = getCurrentMockIntervalBasedOnLastInfo();
+
+    //tdoaStorageSetAnchorPosition(anchorCtx, newpos->x, newpos->y, newpos->z);
+
     if (isGoodKey(newpos->disclosedKey))
     {
       goodLppCount++;
@@ -413,20 +452,15 @@ static void handleLppShortPacket(tdoaAnchorContext_t *anchorCtx, const uint8_t *
       if (memeqzero(&lastLPP[anchorId], len))
       { // set only if zero
         memcpy(&lastLPP[anchorId], newpos, len);
-        bufferCount++;
         // pdMS_TO_TICKS(INTERVAL_LEN_IN_MS*2)
-        TimerHandle_t authTimerHandle = xTimerCreate("authTimer", pdMS_TO_TICKS(AUTH_DELAY), pdFALSE, (void *)(uintptr_t)anchorId, authCallback);
-        if (authTimerHandle != NULL)
-        {
-          xTimerStart(authTimerHandle, 0);
-        }
       }
-
+    } else {
+      badLppCount++;
     }
   }
 }
 
-static void handleLppPacket(const int dataLength, int rangePacketLength, const packet_t *rxPacket, tdoaAnchorContext_t *anchorCtx)
+static void handleLppPacket(const uint32_t localTime, const bool timeIsGood, const int dataLength, int rangePacketLength, const packet_t *rxPacket, tdoaAnchorContext_t *anchorCtx)
 {
   const int32_t payloadLength = dataLength - MAC802154_HEADER_LENGTH;
   const int32_t startOfLppDataInPayload = rangePacketLength;
@@ -441,7 +475,7 @@ static void handleLppPacket(const int dataLength, int rangePacketLength, const p
     {
       lppHeaderCount++;
       const int32_t lppTypeAndPayloadLength = lppDataLength - 1;
-      handleLppShortPacket(anchorCtx, &rxPacket->payload[lppTypeInPayload], lppTypeAndPayloadLength);
+      handleLppShortPacket(localTime, timeIsGood, anchorCtx, &rxPacket->payload[lppTypeInPayload], lppTypeAndPayloadLength);
     }
   }
 }
@@ -483,7 +517,7 @@ static void rxcallback(dwDevice_t *dev)
     
     const uint8_t seqNr = packet->header.seq & 0x7f;
     
-    const uint32_t incomingGlobalTime = packet->header.globalTime;
+    //const uint32_t incomingGlobalTime = packet->header.globalTime;
 
     tdoaAnchorContext_t anchorCtx;
     uint32_t now_ms = T2M(xTaskGetTickCount());
@@ -496,34 +530,7 @@ static void rxcallback(dwDevice_t *dev)
 
     tdoaStorageSetRxTxData(&anchorCtx, rxAn_by_T_in_cl_T, txAn_in_cl_An, seqNr);
 
-    double clockCorrection = tdoaStorageGetClockCorrection(&anchorCtx);
-    lastClockCorrection = clockCorrection;
-    if (timeIsGood && anchorId >= 8 && incomingGlobalTime != 0)
-    { // TODO: remove anchorId constraint after flash all anchors
-
-      if (lastOffset)
-      {
-        static double residualSum = 0;
-        double cTimeOld = STD_TIME_TO_SEC(localTime * lastClockCorrection + lastOffset);
-        int32_t offset = incomingGlobalTime - localTime;
-        double cTimeNew = STD_TIME_TO_SEC(localTime * clockCorrection + offset);
-        syncResidual = (float)(cTimeNew - cTimeOld);
-        double residual = pow(cTimeNew - cTimeOld, 2.0);
-        residualSum += residual;
-        if (STD_TIME_TO_SEC(localTime - syncStartTime) < 3600)
-        { // 10 min
-          syncError = sqrtf(residualSum / ++syncMsgCounter);
-        }
-      }
-      else
-      {
-        syncStartTime = localTime;
-      }
-      lastOffset = incomingGlobalTime - localTime;
-      syncTime = STD_TIME_TO_SEC(localTime * clockCorrection + lastOffset);
-      currentInterval = getCurrentMockIntervalBasedOnLastInfo();
-      handleLppPacket(dataLength, rangeDataLength, &rxPacket, &anchorCtx);
-    }
+    handleLppPacket(localTime ,timeIsGood, dataLength, rangeDataLength, &rxPacket, &anchorCtx);
     pCount++;
     //handleLppPacket(dataLength, rangeDataLength, &rxPacket, &anchorCtx);
     rangingOk = true;
@@ -605,8 +612,17 @@ static void sendTdoaToEstimatorCallback(tdoaMeasurement_t *tdoaMeasurement)
 {
   // Override the default standard deviation set by the TDoA engine.
   tdoaMeasurement->stdDev = stdDev;
-  measCount++;
+
   estimatorEnqueueTDOA(tdoaMeasurement);
+
+  measCount++;
+
+  xQueueSend(teslaQueue, tdoaMeasurement, 0);
+  bufferCount++;
+  TimerHandle_t authTimerHandle = xTimerCreate("authTimer", pdMS_TO_TICKS(AUTH_DELAY), pdFALSE, 0, authCallback);
+  if (authTimerHandle != NULL) {
+    xTimerStart(authTimerHandle, 0);
+  }
 
 #ifdef CONFIG_DECK_LOCO_2D_POSITION
   heightMeasurement_t heightData;
@@ -665,7 +681,7 @@ static void Initialize(dwDevice_t *dev)
   dwCommitConfiguration(dev);
 
   rangingOk = false;
-  // teslaQueue = xQueueCreate(2, sizeof(tdoaMeasurement_t));
+  teslaQueue = xQueueCreate(10, sizeof(tdoaMeasurement_t));
 }
 
 static bool isRangingOk()
